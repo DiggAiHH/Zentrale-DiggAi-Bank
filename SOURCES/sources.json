@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "owner": "DiggAiHH",
+  "watched_repos": [
+    {
+      "name": "Lou-Intit",
+      "url": "https://github.com/DiggAiHH/Lou-Intit",
+      "branch": "main",
+      "type": "bootstrap-kit",
+      "watch_paths": ["_bootstrap/04_MEMORY_LEARNINGS.md", "_bootstrap/02_METHODIK_WORKFLOW.md", "INDEX.md"],
+      "priority": "high"
+    },
+    {
+      "name": "diggai-anamnese",
+      "url": "https://github.com/DiggAiHH/diggai-anamnese",
+      "branch": "main",
+      "type": "production-app",
+      "watch_paths": ["memory/runs/", "progress.txt", "VERSTAENDNIS_LUECKEN.md", "CLAUDE.md", "AGENTS.md"],
+      "priority": "high"
+    },
+    {
+      "name": "JoBetes",
+      "url": "https://github.com/DiggAiHH/JoBetes",
+      "branch": "main",
+      "type": "production-app",
+      "watch_paths": ["memory/runs/", "progress.txt", "VERSTAENDNIS_LUECKEN.md", "CLAUDE.md", "AGENTS.md"],
+      "priority": "medium"
+    },
+    {
+      "name": "wanderwell",
+      "url": "https://github.com/DiggAiHH/wanderwell",
+      "branch": "main",
+      "type": "production-app",
+      "watch_paths": ["memory/runs/", "progress.txt", "VERSTAENDNIS_LUECKEN.md", "CLAUDE.md", "AGENTS.md"],
+      "priority": "medium"
+    }
+  ],
+  "sync_window_hours": 24,
+  "last_sync_iso": null,
+  "next_sync_iso": null,
+  "notify_email": "DiggAi@tutanota.de"
+}
