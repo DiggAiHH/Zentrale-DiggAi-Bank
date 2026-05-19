@@ -40,7 +40,7 @@ Aggregiert aus DiggAiHH-Projekten. Daily-Sync ergänzt automatisch.
 ## G04 — Fly.io Cold-Start
 
 **Erstmals beobachtet:** früh in DiggAi-anamnese
-**Beobachtet in:** DiggAi-anamnese · JoBetes (potenziell)
+**Beobachtet in:** DiggAi-anamnese · JoBetes (confirmed 2026-05-19)
 **Kategorie:** GOTCHA · Tags: `hosting`, `fly`
 
 **Was passiert:** Fly-App pausiert bei Inaktivität. Erster Request = 8–15s Latenz.
@@ -123,3 +123,102 @@ if (process.argv[1] === __filename) { main(); }
 ---
 
 _(Auto-extended by daily-sync.)_
+
+---
+
+## G07 — Magic-Link Rate-Limit bei Supabase Auth
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `supabase`, `auth`, `magic-link`, `rate-limit`
+
+**Was passiert:** Mehrere Magic-Link-Anforderungen in kurzer Folge → Supabase sperrt temporär ~5 min. Spam-Ordner ist 90% der Fälle die echte Ursache.
+**Fix:** Diagnose-Reihenfolge: 1) Spam-Ordner, 2) Mail-App-Cache, 3) Adresse-Tippfehler, 4) Supabase Auth-Logs, 5) Rate-Limit-Wait. Notfall: Operator nimmt Link aus eigener Test-Mail, sendet per Out-of-Band (WhatsApp).
+
+---
+
+## G08 — PWA Add-to-Home-Screen ist Browser-fragmentiert
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `pwa`, `browser-fragmentation`, `onboarding`
+
+**Was passiert:** iPhone Safari hat Teilen-Button unten-mitte, Chrome Android 3-Punkte-Menü, Samsung-Browser 3-Striche-Menü, manche Browser unterstützen es gar nicht.
+**Fix:** Browser-spezifische Setup-Anleitung mit Screenshots. Fallback: Lesezeichen + auf Home-Screen ziehen (sieht nicht wie App aus, funktioniert aber).
+
+---
+
+## G09 — Browser drosselt JS in Background-Tab
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `browser`, `polling`, `background-tab`, `throttling`
+
+**Was passiert:** Polling-basiertes Realtime-UI funktioniert im Foreground-Tab, hängt im Background. Chrome/Safari drosseln Background-Tab-JS auf ≥1 min (Battery-Saving).
+**Fix:** Kurzfristig UI-Hinweis "Tab im Vordergrund halten". Mittelfristig WebSocket statt Polling, oder Service-Worker mit Push-Notifications.
+
+---
+
+## G10 — Service-Worker cached kaputten Build nach Deploy
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `service-worker`, `cache`, `deploy`, `vite-pwa`
+
+**Was passiert:** Nach Deploy mit Bug serviert der SW weiterhin den alten Build, selbst nach Hard-Reload.
+**Fix:** Inkognito-Tab als sofortiger Cross-Check. Längerfristig `skipWaiting()` + `clientsClaim()` im SW, Cache-Version-Bump bei jedem Build via Git-SHA in `manifest.json`.
+
+---
+
+## G11 — Supabase Free-Tier Connection-Pool läuft aus
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `supabase`, `postgres`, `connection-pool`, `free-tier`
+
+**Was passiert:** Viele parallele API-Requests → Supabase-Connections aus → DB-Calls timeouten → API liefert 500.
+**Fix:** Prisma `connection_limit=5`, Supabase-Pool-Mode auf `transaction` statt `session`. Bei Skalierung: Supabase Pro oder eigener PgBouncer.
+
+---
+
+## G12 — CORS_ORIGIN-Mismatch nach Domain-Wechsel
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `cors`, `auth`, `deploy`, `env-vars`
+
+**Was passiert:** Neue Frontend-Domain in Prod, aber API-`CORS_ORIGIN` zeigt auf Staging. Browser blockt Auth-Header → jeder Request 401.
+**Fix:** `CORS_ORIGIN` als Pflicht-Smoke-Test nach Domain-Wechsel. Im Deploy-Workflow `gh secret set CORS_ORIGIN` automatisch vor `flyctl deploy`.
+
+---
+
+## G13 — HEIC-Fotos vom iPhone in Vision-Pipeline
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `image-upload`, `heic`, `vision-api`, `iphone`
+
+**Was passiert:** iPhone speichert Fotos als HEIC. Gemini Vision (und die meisten Vision-APIs) akzeptieren nur JPEG/PNG/WEBP → Upload OK, Vision liefert "unknown"/Confidence 0.
+**Fix:** Frontend-Konvertierung HEIC→JPEG vor Upload (via `heic2any`). Alternative: User-Anleitung "iPhone Einstellungen → Kamera → Formate → Maximale Kompatibilität". Plus Plausibilitäts-Check (z.B. BZ-Range 40–500 mg/dL) als Backup.
+
+---
+
+## G14 — Bash-Sandbox kann zwischen Cowork-Aufrufen ausfallen
+
+**Erstmals beobachtet:** 2026-05-19 in JoBetes (Sync-Session)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `cowork`, `bash-sandbox`, `hypervisor`
+
+**Was passiert:** `mcp__workspace__bash` antwortet `HYPERVISOR_SERVICE_ERROR`. Alle `gh`/`git`/`curl`-Operationen brechen.
+**Fix:** Cowork-Tab schließen + neu öffnen → Sandbox neu provisioniert. Workaround: **Desktop Commander statt workspace-bash** — DC läuft direkt auf dem Operator-PC, kein Sandbox-Risiko. Für Multi-Tool-Workflows: vor Bash-abhängiger Phase einmal `echo ready` als Smoke-Test.
+
+---
+
+## G15 — web_fetch Provenance ist URL-strikt, nicht Domain-basiert
+
+**Erstmals beobachtet:** 2026-05-19 in JoBetes (Sync-Session)
+**Beobachtet in:** JoBetes
+**Kategorie:** GOTCHA · Tags: `cowork`, `web-fetch`, `provenance`, `mcp`
+
+**Was passiert:** Auch wenn URLs im Content eines früheren `web_fetch`-Results stehen, sind sie nicht automatisch in der Provenance. Folge-Fetches werden abgelehnt: "URL not in provenance set".
+**Fix:** Operator muss URL explizit in nächster Nachricht erwähnen. Alternative: Chrome-MCP oder Desktop-Commander `gh api`/`curl` statt web_fetch — die haben keinen Provenance-Check.

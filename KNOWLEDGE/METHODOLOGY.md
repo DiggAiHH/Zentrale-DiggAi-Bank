@@ -78,3 +78,48 @@ Bei Strategie-/Regulatorik-Wechsel: `docs/STATUS_PLAN_FLIP_<DATUM>.md` mit Vorhe
 ---
 
 _(Auto-extended by daily-sync.)_
+
+---
+
+## M05 — Fork-Workflow als Notfall-Push (ohne Collaborator-Access)
+
+**Quelle:** JoBetes (Sync 2026-05-19)
+**Tags:** `git`, `fork`, `collaboration`, `push`
+
+Operator hat keinen direkten Push-Access. Fork erstellen, Branches auf Fork pushen, dann PRs öffnen.
+
+```bash
+git remote add fork <fork-url>
+for b in feat/a feat/b feat/c; do git push fork $b; done
+gh pr create --repo upstream/repo --head fork:<branch>
+```
+
+Vorteil: keine Wartezeit, kein Verlust von Commits. Nachteil: PRs gehen aus Fork-Branch, Reviewer-UI etwas anders.
+
+---
+
+## M06 — Multi-Agent-Sprint mit klaren Tool-Slots
+
+**Quelle:** JoBetes (Sync 2026-05-19)
+**Tags:** `multi-agent`, `parallel-work`, `tool-slots`
+
+Mehrere Agents parallel (z.B. Opus für Patient-Materialien, Codex für Backend-Push, Copilot für Code-Review, Kimi für UI-Polish). Cowork-Claude koordiniert + extrahiert Outputs nach Abschluss.
+
+Jeder Agent kriegt klar definierten Tool-Slot (Chrome-Tab, IDE-Extension, CLI). Status-Tabelle: ✅ FERTIG, ❌ BLOCKED (Reason), ⚠ KANN NICHT REMOTE. Cowork-Claude sammelt Outputs am Ende ein.
+
+---
+
+## M07 — Domain-Pivot mit Pflicht-Compliance-Recheck
+
+**Quelle:** JoBetes (IST-Audit 2026-05-11)
+**Tags:** `compliance`, `mdr`, `ai-act`, `pivot`
+
+Projekt war "non-diagnostic" (limited-risk), Domain-Pivot macht es "diagnostic" (high-risk). Compliance-Docs müssen revidiert werden **bevor** Pilot startet — nicht parallel.
+
+Pre-Pivot-Checklist:
+1. `AI_ACT_RISK_ASSESSMENT.md` neu schreiben.
+2. DPIA-Revision.
+3. MDR-Klassifikation revisit.
+4. §203 StGB-Risiko-Matrix anpassen.
+
+Pivot-Merge erst nach Sign-Off vom Compliance-Reviewer.

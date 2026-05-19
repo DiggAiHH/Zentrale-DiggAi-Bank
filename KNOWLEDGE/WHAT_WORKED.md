@@ -57,3 +57,80 @@ Aggregiert aus DiggAiHH-Projekten. Daily-Sync ergänzt automatisch.
 ---
 
 _(Auto-extended by daily-sync. Last sync: pending first run.)_
+
+---
+
+## W06 — Mock-Fallback für AI-Provider in Offline-Dev
+
+**Erstmals beobachtet:** 2026-05-11 in JoBetes (IST-Audit)
+**Beobachtet in:** JoBetes
+**Kategorie:** WORKED · Tags: `ai-provider`, `mock`, `offline-dev`, `testing`
+
+**Was funktioniert:** Vision/LLM-Provider liefert deterministisch dieselbe Antwort, wenn API-Key fehlt. Dev-Build ohne Cloud-API, Test-Suite ohne Mocking-Library-Overhead.
+**Pattern:** `if (!process.env.PROVIDER_API_KEY) return mockResponse(); else return realCall();` mit klarer LOG-Warnung "MOCK-MODUS aktiv".
+
+---
+
+## W07 — shared-schemas-Package als FE/BE Single-Source-of-Truth
+
+**Erstmals beobachtet:** 2026-05-11 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** WORKED · Tags: `monorepo`, `zod`, `schemas`, `dry`
+
+**Was funktioniert:** `packages/shared-schemas/` exportiert alle Zod-Schemas. Frontend nutzt für Form-Validation, Backend für Request-Body-Validation, beide nutzen denselben TS-Type via `z.infer`. Kein Schema-Drift möglich.
+**Pattern:** `export const PatientSchema = z.object({...}); export type Patient = z.infer<typeof PatientSchema>;`. Beide Apps importieren aus `@<projekt>/shared-schemas`.
+
+---
+
+## W08 — i18n-Parity-Tests fangen fehlende Translations
+
+**Erstmals beobachtet:** 2026-05-11 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** WORKED · Tags: `i18n`, `tests`, `parity`, `rtl`
+
+**Was funktioniert:** Test läuft über alle Locale-Files, prüft Keys gegen Master-Locale. Fängt Missing-Keys (z.B. neue EN-Strings ohne AR-Übersetzung) **vor** Production-Deploy ab.
+**Pattern:** `expect(Object.keys(de)).toEqual(Object.keys(en).sort())` für jedes Namespace.
+
+---
+
+## W09 — Bundle-Budget enforcement in CI
+
+**Erstmals beobachtet:** 2026-05-11 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** WORKED · Tags: `bundle-size`, `ci`, `performance-budget`
+
+**Was funktioniert:** CI fail-t, wenn Initial-Bundle das Budget (z.B. 130 KB gzipped) überschreitet. JoBetes-Stand: 104 KB → 26 KB Puffer. Zwingt zu Lazy-Loading vor jedem Feature-Merge.
+**Pattern:** `size-limit` oder selbstgebauter Check: `stat dist/assets/index-*.js`.
+
+---
+
+## W10 — GDPR Art. 17 via Prisma `onDelete: Cascade`
+
+**Erstmals beobachtet:** 2026-05-11 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** WORKED · Tags: `gdpr`, `prisma`, `cascade-delete`, `right-to-erasure`
+
+**Was funktioniert:** Alle FK-Tabellen auf `User` haben `onDelete: Cascade`. DELETE auf User entfernt abhängige Rows in einer Transaktion. GDPR Art. 17 in 1 DB-Statement.
+**Caveat:** Audit-Log muss VOR Cascade-Delete ein "Anonymisierung statt Delete" pattern haben (Trigger oder App-Logic), sonst geht Audit-Spur verloren.
+
+---
+
+## W11 — Triple-Output für Konzepte (.md + .html + ASCII .txt)
+
+**Erstmals beobachtet:** 2026-04 in mehreren Sessions
+**Beobachtet in:** JoBetes · DiggAi-anamnese
+**Kategorie:** WORKED · Tags: `output-format`, `concept-docs`, `human-handoff`
+
+**Was funktioniert:** Drei Versionen jedes wichtigen Konzept-Dokuments: `.md` für GitHub/IDE, `.html` für Browser-Screenshot, ASCII `.txt` für maschinen-getrennten Ground-Truth (Diff-friendly).
+**Pattern:** Bei jedem strategischen Doc drei Dateien gleichen Inhalts, drei Sichten. ASCII ist die canonical für Tool-zu-Tool-Übergaben.
+
+---
+
+## W12 — Operator-passiv-Pattern (Agent macht Git/Push/Deploy)
+
+**Erstmals beobachtet:** 2026-04 in mehreren Sessions
+**Beobachtet in:** JoBetes · DiggAi-anamnese
+**Kategorie:** WORKED · Tags: `workflow`, `operator-mode`, `automation`, `desktop-commander`
+
+**Was funktioniert:** Operator klickt nur wenn nötig (max 1 Klick, alles vorbereitet). Agent macht git/push/deploy via Desktop Commander auf dem Operator-PC. Spart Stunden pro Woche, plus Fehler durch manuelles Tippen.
+**Pattern:** Wenn Operator-Aktion nötig, Agent öffnet Tab/Dialog vor, sagt EXAKT was zu klicken. Niemals `.bat`-Files für manuelles Ausführen vorbereiten.

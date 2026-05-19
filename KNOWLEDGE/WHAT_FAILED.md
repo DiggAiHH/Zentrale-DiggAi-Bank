@@ -60,3 +60,47 @@ Aggregiert aus DiggAiHH-Projekten. Daily-Sync ergänzt automatisch.
 ---
 
 _(Auto-extended by daily-sync.)_
+
+---
+
+## F05 — Anonyme ChatGPT/Codex-Sessions
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes (Multi-Agent-Sprint)
+**Beobachtet in:** JoBetes
+**Kategorie:** FAILED · Tags: `multi-agent`, `chatgpt`, `codex`, `auth`
+
+**Was scheitert:** ChatGPT/Codex anonym von Chrome-MCP aus → ChatGPT Plus erfordert Login. Agent darf fremden Login nicht durchführen (Privacy-Regel).
+**Fix:** Operator muss vorher in den Tab einloggen, dann übernimmt Agent. Alternative: Codex API direkt mit Operator-API-Key, kein UI-Round-trip.
+
+---
+
+## F06 — Copilot M365 CAPTCHA-Bypass
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** FAILED · Tags: `multi-agent`, `copilot`, `captcha`, `bot-detection`
+
+**Was scheitert:** Microsoft Copilot zeigt CAPTCHA bei Bot-Verdacht. Agent darf Bot-Verifikation nicht umgehen. Tab hängt mit fertig-eingegebenem Prompt im Submit-Stadium.
+**Fix:** Operator klickt CAPTCHA, ab dann läuft Prompt. Alternative: Copilot M365 nicht für Agent-Workflows nutzen, API-Key-Provider bevorzugen.
+
+---
+
+## F07 — IDE-Extensions (z.B. Kimi K2 in VS Code) sind nicht ferngesteuert
+
+**Erstmals beobachtet:** 2026-05-13 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** FAILED · Tags: `multi-agent`, `vscode`, `ide-extension`, `tier-restrictions`
+
+**Was scheitert:** Cowork-Computer-Use hat IDEs auf "click"-Tier — kein Typing, kein Trigger der Sidebar-Extension. Agent kann den Prompt nicht reinkopieren.
+**Fix:** Operator copy-pastet selbst. Alternative: IDE-Extension durch CLI ersetzen (z.B. statt VS-Code-Extension den CLI-Modus des Agents nutzen).
+
+---
+
+## F08 — Web-Coverage <50% vor Pilot-Start
+
+**Erstmals beobachtet:** 2026-05-11 in JoBetes
+**Beobachtet in:** JoBetes
+**Kategorie:** FAILED · Tags: `tests`, `coverage`, `risk`
+
+**Was scheitert:** Web-App-Modul mit 49% Coverage. Patient-Bugs (z.B. BZ-Eingabe wird nicht persistiert) nicht testabgedeckt. Bug live = keine Reproduktions-Tests.
+**Fix:** Pre-Pilot-Gate: Web-Coverage ≥75% zwingend. Kein Live-Schalten unter Threshold. Disziplin-Pattern: jeder neue UI-Code-PR muss mindestens 1 Test erweitern.
