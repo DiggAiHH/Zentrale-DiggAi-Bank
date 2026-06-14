@@ -10,3 +10,6 @@ Thumbs.db
 *.log
 .cache/
 tmp/
+
+.prbody.tmp
+KNOWLEDGE/RUN_HARNESS/_digest.txt

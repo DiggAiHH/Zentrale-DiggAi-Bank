@@ -123,3 +123,37 @@ Pre-Pivot-Checklist:
 4. §203 StGB-Risiko-Matrix anpassen.
 
 Pivot-Merge erst nach Sign-Off vom Compliance-Reviewer.
+
+
+---
+
+## M08 — Adversarial Multi-Agent-Review mit Selbst-Verifikation am Limit
+
+**Quelle:** diggai-anamnese (Review-Sessions 2026-06-11/12)
+**Tags:** `review`, `multi-agent`, `verification`
+
+Mehrere Review-Agents fan-out (z.B. 4 Dimensionen × 2 Verifier). Brechen Review-Agents am Session-Limit mit unverifizierten Findings ab, verifiziert der Haupt-Agent die Top-/mehrfach-gemeldeten Findings selbst im Code. Grundregel: "unwiderlegt" ≠ "wahr" — nur verifizierte Findings werden gefixt.
+
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-11_claude-code_fable-5-19.md`
+
+---
+
+## M09 — Fail-closed Guard für Risiko-Pfade (Medizin-Kern / Secrets / Deploy)
+
+**Quelle:** diggai-anamnese (Agenten-Infra MWP/ICM)
+**Tags:** `guardrails`, `safety`, `fail-closed`, `agents`
+
+Guard-Skript DENY-gatet Medizin-Kern / Secrets / Deploy / push / ssh / docker (exit 2), ALLOW für normale Builds. Tool-frei parsen (KEIN jq-Dependency — fehlt jq, blockiert ein jq-basierter Guard fail-closed ALLES). Globs mit UND ohne führenden Slash testen (`deploy/*` matcht `deploy/...` nicht automatisch). Mit ≥12 Fällen verifizieren.
+
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-11_claude-code_fable-5-23.md`
+
+---
+
+## M10 — Session-Limit-Handoff: Folge-Agent übernimmt Working-Tree + Gates + Commit
+
+**Quelle:** diggai-anamnese (mehrfach in fable-5-Sessions)
+**Tags:** `handoff`, `session-limit`, `multi-agent`
+
+Vorgänger-Agent bricht häufig vor Gates/Commit am Session-Limit ab. Etabliertes Muster: der Folge-Agent übernimmt den Working-Tree, fährt die Gates selbst und committet. Voraussetzung: by-name-Staging + HEAD-Recheck (W14), damit keine Fremd-Änderungen mitlecken.
+
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-12_claude-code_fable-5-01.md`

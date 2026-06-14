@@ -104,3 +104,52 @@ _(Auto-extended by daily-sync.)_
 
 **Was scheitert:** Web-App-Modul mit 49% Coverage. Patient-Bugs (z.B. BZ-Eingabe wird nicht persistiert) nicht testabgedeckt. Bug live = keine Reproduktions-Tests.
 **Fix:** Pre-Pilot-Gate: Web-Coverage ≥75% zwingend. Kein Live-Schalten unter Threshold. Disziplin-Pattern: jeder neue UI-Code-PR muss mindestens 1 Test erweitern.
+
+
+---
+
+## F09 — Veraltete Runbook-Zeile blind befolgt → Prod-Outage
+
+**Erstmals beobachtet:** 2026-06-07 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** FAILED · Tags: `deploy`, `runbook`, `outage`, `docker`
+
+**Was scheitert:** Deploy-Kommando 1:1 aus veralteter DEPLOY.md (`--project-name diggai`) ausgeführt → falsches Docker-Netz → ~11 Min 502-Prod-Outage.
+**Fix:** Deploy-Kommandos vor Ausführung gegen den laufenden Stack (Container-Labels/Netze) verifizieren. Runbook nach JEDEM Infra-Change aktualisieren; veraltete Zeile sofort korrigieren. Siehe G18.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-07_claude-code_opus-4-7-01.md` (diggai-anamnese)
+
+---
+
+## F10 — Push auf `master` triggert deploy.yml = ungewollter Backend-Deploy
+
+**Erstmals beobachtet:** 2026-06-07 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** FAILED · Tags: `ci`, `github-actions`, `deploy`, `footgun`
+
+**Was scheitert:** `git push origin master` löst den GitHub-Actions-Deploy aus; bei nicht deploy-reifem Backend = Footgun (Outage-Risiko). Mehrfach bewusst NICHT gepusht, um das zu vermeiden.
+**Fix:** Workflow GitHub-seitig disablen, solange BE nicht deploy-reif; FE-/BE-Deploys entkoppeln; bewusst getrennt pushen. Lokale Commits halten bis BE-GO.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-07_claude-code_opus-4-8-03.md` (diggai-anamnese)
+
+---
+
+## F11 — Playwright in Sandbox/CI für form-heavy Medizin-SPA
+
+**Erstmals beobachtet:** 2026-05-27 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (durchgängig)
+**Kategorie:** FAILED · Tags: `playwright`, `e2e`, `sandbox`, `flaky`, `medical-spa`
+
+**Was scheitert:** Playwright häuft Heap-OOM an (akkumulierte Screenshots), `locator.isVisible()` wartet nicht, signature_pad-Canvas nicht füllbar, Custom-Comboboxen/Listboxen öffnen nicht auf synthetischen Klick → unzuverlässig rote Tests, die KEINE App-Bugs sind.
+**Fix:** API-Pfad-Tests (W13) + a11y-Tree für UI; wo Browser nötig: `waitFor({state:'visible'})`-Helper, `addInitScript` für Locale, Canvas/Signatur via API. Siehe W13.
+**Quellen:** `diggai-anamnese/memory/runs/2026-05-27_claude-code_opus-4-7-08.md`, `…2026-06-07_claude-code_opus-4-8-02.md` (diggai-anamnese)
+
+---
+
+## F12 — `test:run` (combined jsdom) lässt Server-Tests unter jsdom laufen → Phantom-Fails
+
+**Erstmals beobachtet:** 2026-06-06 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (mehrfach)
+**Kategorie:** FAILED · Tags: `vitest`, `jsdom`, `test-env`, `flaky`
+
+**Was scheitert:** Kombinierter jsdom-Lauf führt Server-Tests im jsdom-Env aus → ~161 "Fails", die keine echten Fehler sind. Auch Parallel-Last (`test:unit` + `test:server` gleichzeitig) erzeugt Timeout-Flakes.
+**Fix:** `test:unit` und `test:server` SEPARAT als autoritativ behandeln; verdächtige Fails in Isolation re-verifizieren (meist grün — Maschinen-Footgun).
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-06_claude-code_opus-4-7-09.md` (diggai-anamnese)

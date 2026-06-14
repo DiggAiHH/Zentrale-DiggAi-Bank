@@ -134,3 +134,61 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 
 **Was funktioniert:** Operator klickt nur wenn nötig (max 1 Klick, alles vorbereitet). Agent macht git/push/deploy via Desktop Commander auf dem Operator-PC. Spart Stunden pro Woche, plus Fehler durch manuelles Tippen.
 **Pattern:** Wenn Operator-Aktion nötig, Agent öffnet Tab/Dialog vor, sagt EXAKT was zu klicken. Niemals `.bat`-Files für manuelles Ausführen vorbereiten.
+**2026-06-Ergänzung (diggai-anamnese):** Für credential-gebundene Aktionen (INWX-DNS-Flip, SSH-Passphrase) "One-Click-Prefill": Agent lokalisiert die exakte Aktion (z.B. DNS-Record-`rid` + Zielwert/TTL) und bereitet sie scharf vor; Operator macht NUR Login + Save. Siehe G24.
+
+
+---
+
+## W13 — Node-fetch-Smoke-Test statt Browser/Playwright
+
+**Erstmals beobachtet:** 2026-05-27 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (mehrfach)
+**Kategorie:** WORKED · Tags: `testing`, `smoke-test`, `node-fetch`, `csrf`
+
+**Was funktioniert:** Reiner Node-`fetch`-Test mit CookieJar (Set-Cookie-Parse + Cookie-Header-Rebuild) + CSRF-Token-Roundtrip deckt alles Backend-Prüfbare ab — kein Browser-Heap-OOM, Sekunden statt Minuten, reproduzierbar. Persistiert als Smoke-Vorlage (`e2e/live-audit/*.mjs`).
+**Pattern:** `node smoke.mjs` holt CSRF-Token, baut Cookie-Header neu, POSTet Session/Answers; prüft Statuscodes. Ersetzt Playwright für alle Nicht-UI-Flows. Siehe F11.
+**Quellen:** `diggai-anamnese/memory/runs/2026-05-27_claude-code_opus-4-7-06.md` (diggai-anamnese)
+
+---
+
+## W14 — Concurrent-Agent-Git-Hygiene: by-name-Commit, HEAD-Recheck, Never-Stage-Residue
+
+**Erstmals beobachtet:** 2026-06-04 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (mehrfach)
+**Kategorie:** WORKED · Tags: `git`, `multi-agent`, `concurrency`, `hygiene`
+
+**Was funktioniert:** Bei mehreren parallel schreibenden Agents: NIE `git add -A`; nur kohärente Dateien by-name (`git commit -- <file>`); HEAD direkt vor dem Commit re-checken (Fremd-Commits wandern den Branch weiter); Fremd-Residue dem Operator zur Einzel-Entscheidung flaggen statt blind mitcommitten.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-04_claude-code_opus-4-7-02.md` (diggai-anamnese)
+
+---
+
+## W15 — One-off-Node-Skript für Multi-Locale-i18n-Edits
+
+**Erstmals beobachtet:** 2026-06-08 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (mehrfach)
+**Kategorie:** WORKED · Tags: `i18n`, `node-script`, `locales`, `encoding`
+
+**Was funktioniert:** Statt Edit-Tool (verlangt Read jeder der 10 Locale-JSONs) ein wegwerfbares Node-Skript: key-gematchtes In-Place-Replace pro Locale, EOL/BOM/Encoding-erhaltend, self-verifying (OK/SKIP/FAIL je Datei + `JSON.parse` aller Locales), danach gelöscht.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-08_claude-code_opus-4-8-01.md`, `…2026-06-13_claude-code_opus-4-8-01.md` (diggai-anamnese)
+
+---
+
+## W16 — Ehrliche Verifikation über das Mögliche statt fingierter Beweise
+
+**Erstmals beobachtet:** 2026-06-03 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (durchgängig)
+**Kategorie:** WORKED · Tags: `verification`, `honesty`, `http`, `browser`, `culture`
+
+**Was funktioniert:** Wenn Browser/Playwright/Docker fehlen: über HTTP-Statuscodes + `get_page_text`/a11y-Tree + JS-DOM-Reads + read_network/read_console verifizieren — und die NICHT testbaren Teile ehrlich als "blockiert/skipped" dokumentieren statt Ergebnisse zu fingieren. Höheres Signal, kein falsches Grün; Operator-Vertrauen bleibt intakt.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-03_claude-code_opus-4-7-04.md`, `…2026-06-04_claude-code_opus-4-7-03.md` (diggai-anamnese)
+
+---
+
+## W17 — Geschlossene Beweiskette statt unzuverlässigem Live-Scan (DSGVO same-origin)
+
+**Erstmals beobachtet:** 2026-06-04 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `dsgvo`, `verification`, `same-origin`, `evidence-chain`
+
+**Was funktioniert:** Wo ein Live-Scan nicht zuverlässig möglich ist ("null Fremd-CDN-Hosts während echtem Scan"), die Garantie über eine geschlossene Kette absichern: Unit-Tests beweisen same-origin-Pfade in BEIDEN Code-Pfaden + Quell-Inspektion der Lib + `dist`-Grep nach Fremd-Hosts. Drei unabhängige Belege schlagen einen flakigen Browser-Scan.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-04_claude-code_opus-4-8-01.md` (diggai-anamnese)
