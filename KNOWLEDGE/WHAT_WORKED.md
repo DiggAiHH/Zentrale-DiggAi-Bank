@@ -192,3 +192,16 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 
 **Was funktioniert:** Wo ein Live-Scan nicht zuverlässig möglich ist ("null Fremd-CDN-Hosts während echtem Scan"), die Garantie über eine geschlossene Kette absichern: Unit-Tests beweisen same-origin-Pfade in BEIDEN Code-Pfaden + Quell-Inspektion der Lib + `dist`-Grep nach Fremd-Hosts. Drei unabhängige Belege schlagen einen flakigen Browser-Scan.
 **Quellen:** `diggai-anamnese/memory/runs/2026-06-04_claude-code_opus-4-8-01.md` (diggai-anamnese)
+
+
+---
+
+## W18 — Harness-unabhängige Verifikation via standalone Node `--experimental-strip-types`-Skript (importiert TS-Quelle direkt)
+
+**Erstmals beobachtet:** 2026-06-16 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (mehrfach)
+**Kategorie:** WORKED · Tags: `verification`, `node`, `webcrypto`, `strip-types`, `vitest-down`, `smoke-test`
+
+**Was funktioniert:** Wenn vitest unbrauchbar ist (z.B. win32-Bindings in Linux-Sandbox, G27), den Logik-/Krypto-Kern über ein wiederverwendbares Node-Skript (`node --experimental-strip-types`) verifizieren, das die ECHTEN TS-Module direkt importiert und gegen Node-WebCrypto prüft — ECDH/HKDF/AES-GCM seal/open, GCM-Tamper-wirft, Key-Rotation, Padding-Roundtrip. Lief 26/26 grün, völlig unabhängig vom toten React/rolldown-Test-Netz; als `npm run`-Script + doppelklickbares `.cmd` verankert.
+**Pattern:** `node --experimental-strip-types scripts/verify-<x>.ts` importiert `src/lib/...` direkt, assertet das Verhalten über native WebCrypto; ersetzt vitest für reine Logik-Kerne. Ergänzt W13 (HTTP-Smoke) und W16 (ehrliche Verifikation).
+**Quellen:** `memory/runs/2026-06-15_cowork_opus-4-8-16.md`, `2026-06-16_cowork_opus-4-8-01.md` (diggai-anamnese)

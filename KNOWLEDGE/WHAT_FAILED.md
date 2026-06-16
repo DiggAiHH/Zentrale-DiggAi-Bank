@@ -148,8 +148,34 @@ _(Auto-extended by daily-sync.)_
 
 **Erstmals beobachtet:** 2026-06-06 in diggai-anamnese
 **Beobachtet in:** diggai-anamnese (mehrfach)
+**Beobachtet-Update:** 2026-06-16 — zusätzlich Voll-Lauf-OOM (JS-Heap 2GB, "Worker exited unexpectedly", 182 Files/18 Min) als False-Positive-Quelle; Mitigation `NODE_OPTIONS=--max-old-space-size` + `--no-file-parallelism` in vitest.config + gezielte `verify-*.cmd` statt Voll-Lauf
 **Kategorie:** FAILED · Tags: `vitest`, `jsdom`, `test-env`, `flaky`
 
 **Was scheitert:** Kombinierter jsdom-Lauf führt Server-Tests im jsdom-Env aus → ~161 "Fails", die keine echten Fehler sind. Auch Parallel-Last (`test:unit` + `test:server` gleichzeitig) erzeugt Timeout-Flakes.
 **Fix:** `test:unit` und `test:server` SEPARAT als autoritativ behandeln; verdächtige Fails in Isolation re-verifizieren (meist grün — Maschinen-Footgun).
 **Quellen:** `diggai-anamnese/memory/runs/2026-06-06_claude-code_opus-4-7-09.md` (diggai-anamnese)
+
+
+---
+
+## F13 — `npm audit fix --force` (mehrfach) → SemVer-Major-Bumps außerhalb der package.json-Range
+
+**Erstmals beobachtet:** 2026-06-16 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** FAILED · Tags: `npm`, `audit-fix`, `semver`, `dependencies`, `breaking-change`
+
+**Was scheitert:** Mehrfaches `npm audit fix --force` hat SemVer-Major-Bumps eingespielt (socket.io 4.2↔4.8, node-cron 3→4, concurrently 9→10), teils AUSSERHALB der in package.json deklarierten Range → Realtime-/Cron-Bruchrisiko, schwer reviewbarer Lock-Drift.
+**Fix:** `--force` meiden; Audit-Fixes einzeln + im Range prüfen. Schaden zurücksetzen via `git checkout -- package.json package-lock.json` + sauberes `npm install` (danach gezielt fehlende devDeps nachziehen).
+**Quellen:** `memory/runs/2026-06-16_cowork_opus-4-8-08.md` (diggai-anamnese)
+
+---
+
+## F14 — Preflight (Run-Log + Once-Guard) im Multi-Agent-Tree übersprungen → fremde untracked Arbeit überschrieben
+
+**Erstmals beobachtet:** 2026-06-16 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** FAILED · Tags: `multi-agent`, `no-redundancy`, `untracked`, `overwrite`, `preflight`
+
+**Was scheitert:** Eine Parallel-Session hat ohne Preflight (memory/runs lesen + once-guard) losgecodet und Dateien einer anderen Session via Write ÜBERSCHRIEBEN. Da diese nie committet (untracked) waren, waren die Vorversionen unwiederbringlich verloren; zusätzlich entstanden Duplikate (zwei Padding-Libs, zwei SRI-Mechanismen), die nachträglich reconciled werden mussten.
+**Fix:** Vor jedem Schreiben im geteilten Tree zwingend Preflight: letzte Run-Logs lesen + once-guard-precheck. Bei heißem Tree nur NEUE Dateien unter eindeutigen Pfaden anlegen, bestehende minimal-invasiv erweitern, heiße Dateien gar nicht anfassen. Untracked = nicht wiederherstellbar → niemals blind überschreiben. Siehe W14, M05.
+**Quellen:** `memory/runs/2026-06-15_cowork_opus-4-8-05.md`, `2026-06-15_cowork_opus-4-8-07.md` (diggai-anamnese)
