@@ -410,3 +410,15 @@ _(Auto-extended by daily-sync.)_
 **Was passiert:** Auf der Windows-Maschine blockiert die PowerShell-ExecutionPolicy `npm.ps1` → `npm run …` aus einer PS-Session schlägt fehl.
 **Fix:** npm-Befehle über die cmd-Shell ausführen (Desktop Commander startet cmd direkt auf Windows). Alternativ Skripte als `.cmd`/`-lc`-Login-Shell wrappen. Siehe G01, G27.
 **Quellen:** `memory/runs/2026-06-16_cowork_opus-4-8-09.md` (diggai-anamnese)
+
+---
+
+## G31 — `autocomplete="off"` stoppt Passwort-Manager nicht: per-Feld `name` + `data-lpignore`/`data-1p-ignore` nötig
+
+**Erstmals beobachtet:** 2026-06-16 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `frontend`, `html-forms`, `autofill`, `password-manager`, `privacy`, `react`
+
+**Was passiert:** Auf sensiblen Formularfeldern (Identitäts-, Schlüssel- oder sonstige Krypto-Eingaben) füllen Browser und Passwort-Manager Werte automatisch ein — `autocomplete="off"` allein reicht NICHT. Folge: ein zuvor getippter Wert (z.B. Vorname) leakt ins falsche Feld, oder ein Schlüssel-/Passwort-Feld kommt vorbefüllt.
+**Fix:** (1) Pro Feld einen kontrollierten `name` setzen, damit der Browser die Felder nicht als bekannte Gruppe behandelt. (2) Für echtes Unterdrücken zusätzlich die Passwort-Manager-Ignore-Attribute setzen: `data-lpignore="true"` (LastPass) und `data-1p-ignore="true"` (1Password), plus `autoCorrect="off"` und `spellCheck={false}`. (3) Default-`autoComplete` typ-abgeleitet vergeben (email/tel/name); nur die wirklich sensiblen Felder hart auf `off` + Ignore-Attribute schalten.
+**Quellen:** `src/components/inputs/TextInput.tsx`, `src/components/inputs/PatientKeyStep.tsx` (diggai-anamnese, Commit 99d3f04)
