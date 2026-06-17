@@ -422,3 +422,52 @@ _(Auto-extended by daily-sync.)_
 **Was passiert:** Auf sensiblen Formularfeldern (Identitäts-, Schlüssel- oder sonstige Krypto-Eingaben) füllen Browser und Passwort-Manager Werte automatisch ein — `autocomplete="off"` allein reicht NICHT. Folge: ein zuvor getippter Wert (z.B. Vorname) leakt ins falsche Feld, oder ein Schlüssel-/Passwort-Feld kommt vorbefüllt.
 **Fix:** (1) Pro Feld einen kontrollierten `name` setzen, damit der Browser die Felder nicht als bekannte Gruppe behandelt. (2) Für echtes Unterdrücken zusätzlich die Passwort-Manager-Ignore-Attribute setzen: `data-lpignore="true"` (LastPass) und `data-1p-ignore="true"` (1Password), plus `autoCorrect="off"` und `spellCheck={false}`. (3) Default-`autoComplete` typ-abgeleitet vergeben (email/tel/name); nur die wirklich sensiblen Felder hart auf `off` + Ignore-Attribute schalten.
 **Quellen:** `src/components/inputs/TextInput.tsx`, `src/components/inputs/PatientKeyStep.tsx` (diggai-anamnese, Commit 99d3f04)
+
+
+---
+
+## G32 — Lokale DB nicht erreichbar (Prisma `P1001`) → `migrate dev` blockiert; manuelle idempotente SQL-Migration + `prisma generate` entsperrt tsc offline
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `prisma`, `migrations`, `offline-db`, `p1001`, `generate`, `idempotent-sql`, `deploy`
+
+**Was passiert:** Ist die lokale Dev-DB down (`localhost:5432`, Prisma `P1001`), schlägt `prisma migrate dev` komplett fehl — neue Modelle/Spalten lassen sich nicht migrieren, und der generierte Client kennt das neue Modell nicht (tsc rot auf `prisma.<neuesModel>`). Die Prod-DB ist oft nur über den Host (hinter Server/VPN) erreichbar, nicht aus der lokalen/Sandbox-Umgebung → `migrate dev` ist gar keine Option.
+**Fix:** (1) `npx prisma generate` braucht KEINE DB-Verbindung und entsperrt tsc sofort (Client-Typen für das neue Modell). (2) Migration von Hand als idempotentes SQL schreiben (`prisma/migrations_manual/<datum>_<name>.sql` mit `CREATE TABLE IF NOT EXISTS`, vorhandene Enums nicht neu anlegen) — additiv und gefahrlos. (3) Vor dem Backend-Deploy auf der Ziel-DB anwenden: `psql $DATABASE_URL -f <migration>.sql`, DANN deployen. Ergänzt G29 (committe Migrationen) für den Fall „DB gar nicht erreichbar".
+**Quellen:** `memory/runs/2026-06-16_cowork_opus-4-8-19.md`, `2026-06-16_cowork_opus-4-8-20.md` (diggai-anamnese, Commit ab0bb5b)
+
+---
+
+## G33 — Globale Print-Regel `.fixed{display:none}` blendet absichtlich fixierte Druck-Overlays mit aus
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `css`, `print`, `media-print`, `tailwind`, `fixed`, `frontend`
+
+**Was passiert:** Ein Druck-Overlay, das per Tailwind-Utility `fixed` positioniert ist, wird von einer globalen Print-Regel `@media print { .fixed { display:none } }` (gedacht zum Ausblenden von Sticky-/Fixed-UI beim Drucken) mit ausgeblendet → das Blatt druckt leer/falsch, obwohl das Overlay am Bildschirm korrekt sichtbar ist.
+**Fix:** Druckbare Overlays NICHT über die generische `fixed`-Utility positionieren, sondern eine eigene Klasse (z.B. `emergency-print-overlay`) + eigene `@media print`-Regeln vergeben (Muster wie ein bereits funktionierendes Druckblatt). So greift die globale `.fixed`-Ausblendung nicht auf das Druck-Element. Generell: globale Print-Resets, die auf Utility-Klassen matchen, kollidieren mit absichtlich gedruckten Elementen derselben Klasse.
+**Quellen:** `memory/runs/2026-06-16_cowork_opus-4-8-22.md`, `src/index.css` (diggai-anamnese, Commit 34f1949)
+
+---
+
+## G34 — i18n-Keys hängen am DE-Quellstring: Edit am DE-Fragetext wirft alle Nicht-DE-Locales auf DE-Fallback
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `i18n`, `locales`, `fallback`, `source-string-key`, `translation`
+
+**Was passiert:** Wenn die Übersetzungen auf dem DE-Quellstring keyen (alle Locale-Dateien referenzieren den DE-Text als Key), wirft jede Änderung am DE-Text die Keys für ALLE Nicht-DE-Sprachen ins Leere → stiller Fallback auf DE für die geänderte Zeichenkette, ohne sichtbaren Fehler oder Build-Bruch.
+**Fix:** Verhaltens-/Validierungsänderungen vornehmen, ohne den übersetzten String anzufassen (z.B. nur `validation.required` true→false statt das Label umzuschreiben — die Optionalität greift trotzdem, weil `validateAnswer` das Pattern bei leerem Wert überspringt). Muss der Text doch geändert werden: in EINEM Schritt alle Locales nachziehen (siehe W15 One-off-Node-Skript). Merke: übersetzbare Strings sind faktisch Teil des Keys.
+**Quellen:** `memory/runs/2026-06-16_claude-code_opus-4-8-01.md` (diggai-anamnese, Commit dffbbc2)
+
+---
+
+## G35 — Exakte `where`-Objekt-Assertion in Prisma-Tests bricht bei umgebungsbedingten Filtern → `objectContaining`
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `testing`, `vitest`, `prisma`, `objectcontaining`, `env-conditional`, `mock`, `tenant`
+
+**Was passiert:** Ein Test, der das `where`-Objekt eines Prisma-Calls exakt matcht (`toHaveBeenCalledWith({ where: { … } })`), bricht, sobald der Code zur Laufzeit umgebungsabhängig zusätzliche Filter ergänzt (z.B. ein nur in Prod aktiver Visibility-/Tenant-Filter). Test ist grün in Dev-Config, rot in Prod-Config — kein echter Fehler, sondern Over-Specification.
+**Fix:** Statt Exakt-Match `expect.objectContaining({ … })` auf die stabilen Pflichtfelder asserten; umgebungsbedingte Zusatz-Constraints toleriert der Matcher. Gilt analog für jede zur Laufzeit konditional aufgebaute Query-/Payload-Form (nicht nur Prisma).
+**Quellen:** `server/middleware/tenant.test.ts` (diggai-anamnese, Commit af2bd10)

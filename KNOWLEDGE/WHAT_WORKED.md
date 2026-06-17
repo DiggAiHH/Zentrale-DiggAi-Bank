@@ -205,3 +205,15 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 **Was funktioniert:** Wenn vitest unbrauchbar ist (z.B. win32-Bindings in Linux-Sandbox, G27), den Logik-/Krypto-Kern über ein wiederverwendbares Node-Skript (`node --experimental-strip-types`) verifizieren, das die ECHTEN TS-Module direkt importiert und gegen Node-WebCrypto prüft — ECDH/HKDF/AES-GCM seal/open, GCM-Tamper-wirft, Key-Rotation, Padding-Roundtrip. Lief 26/26 grün, völlig unabhängig vom toten React/rolldown-Test-Netz; als `npm run`-Script + doppelklickbares `.cmd` verankert.
 **Pattern:** `node --experimental-strip-types scripts/verify-<x>.ts` importiert `src/lib/...` direkt, assertet das Verhalten über native WebCrypto; ersetzt vitest für reine Logik-Kerne. Ergänzt W13 (HTTP-Smoke) und W16 (ehrliche Verifikation).
 **Quellen:** `memory/runs/2026-06-15_cowork_opus-4-8-16.md`, `2026-06-16_cowork_opus-4-8-01.md` (diggai-anamnese)
+
+
+---
+
+## W19 — „Grün-by-mirror": neue Brücke/Wrapper 1:1 an CI-getestete Primitive delegieren + deren Test spiegeln
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese (mehrfach, v2-Rückkanal)
+**Kategorie:** WORKED · Tags: `confidence`, `toolchain-down`, `mirror-test`, `additive`, `crypto`, `prisma`
+
+**Was funktioniert:** Wenn die lokale Toolchain nicht läuft (z.B. win32-Bindings in der Linux-Sandbox, G27), neue Funktionalität bewusst additiv bauen und 1:1 an bereits CI-getestete Primitive delegieren (hier: Krypto rein über die `patientKeypair`-Primitive, die neue Relay-Route 1:1 an die bestehende `v2-relay.ts` gespiegelt). Den neuen Test als Spiegel des bestehenden Tests der Primitive schreiben („grün-by-mirror"). So bleibt die Konfidenz hoch, obwohl `vitest`/`tsc` lokal nicht ausführbar sind — der spätere Lauf auf dem Host bestätigt nur noch, statt erstmals zu prüfen. Ergänzt W18 (harness-unabhängige Verifikation) und W14 (additive, by-name-Git-Hygiene).
+**Quellen:** `memory/runs/2026-06-16_cowork_opus-4-8-18.md`, `2026-06-16_cowork_opus-4-8-19.md` (diggai-anamnese, Commit ab0bb5b)

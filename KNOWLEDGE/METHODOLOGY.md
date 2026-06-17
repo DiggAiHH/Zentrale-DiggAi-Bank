@@ -157,3 +157,16 @@ Guard-Skript DENY-gatet Medizin-Kern / Secrets / Deploy / push / ssh / docker (e
 Vorgänger-Agent bricht häufig vor Gates/Commit am Session-Limit ab. Etabliertes Muster: der Folge-Agent übernimmt den Working-Tree, fährt die Gates selbst und committet. Voraussetzung: by-name-Staging + HEAD-Recheck (W14), damit keine Fremd-Änderungen mitlecken.
 
 **Quellen:** `diggai-anamnese/memory/runs/2026-06-12_claude-code_fable-5-01.md`
+
+
+
+---
+
+## M11 — Subagent-Absenz-Claims („X existiert nicht im Code") sind oft False-Negatives → selbst gegenprüfen
+
+**Quelle:** diggai-anamnese (v2-Rückkanal / Claim-Gap-Analyse 2026-06-16)
+**Tags:** `multi-agent`, `subagent`, `false-negative`, `verification`
+
+Ein Subagent meldete einen vorhandenen Praxis-Private-Key fälschlich als ABSENT; die Eigen-Gegenprüfung im Code (`praxisResidentKeyStore.ts` + `clientCrypto.v2.ts`) belegte das Gegenteil. Lehre: Die NEGATIVE Aussage eines Subagents („Feature/Datei/Pfad fehlt") ist genauso fehleranfällig wie ein falsches Finding — und teurer, weil sie zu Doppel-Implementierung oder falschen Außen-Aussagen (z.B. einem Kunden gemeldete „Lücke", die keine ist) führt. Vor dem Handeln auf eine gemeldete Absenz immer selbst im Code verifizieren (grep/Read der genannten Pfade). Komplement zu M08 („unwiderlegt ≠ wahr").
+
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-16_cowork_opus-4-8-17.md`
