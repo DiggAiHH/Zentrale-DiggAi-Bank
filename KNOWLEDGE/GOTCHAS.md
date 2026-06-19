@@ -471,3 +471,39 @@ _(Auto-extended by daily-sync.)_
 **Was passiert:** Ein Test, der das `where`-Objekt eines Prisma-Calls exakt matcht (`toHaveBeenCalledWith({ where: { … } })`), bricht, sobald der Code zur Laufzeit umgebungsabhängig zusätzliche Filter ergänzt (z.B. ein nur in Prod aktiver Visibility-/Tenant-Filter). Test ist grün in Dev-Config, rot in Prod-Config — kein echter Fehler, sondern Over-Specification.
 **Fix:** Statt Exakt-Match `expect.objectContaining({ … })` auf die stabilen Pflichtfelder asserten; umgebungsbedingte Zusatz-Constraints toleriert der Matcher. Gilt analog für jede zur Laufzeit konditional aufgebaute Query-/Payload-Form (nicht nur Prisma).
 **Quellen:** `server/middleware/tenant.test.ts` (diggai-anamnese, Commit af2bd10)
+
+---
+
+## G36 — react-i18next-Mock erzeugt pro `useTranslation()`-Aufruf neue `t`/`i18n`-Referenzen → Endlos-Render-Loop
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `vitest`, `react-i18next`, `mock`, `render-loop`, `stable-reference`, `testing`
+
+**Was passiert:** Ein globaler `vi.mock('react-i18next', …)`, der bei JEDEM `useTranslation()`-Aufruf ein frisches `{ t, i18n }`-Objekt (neue Funktions-/Objekt-Referenzen) zurückgibt, treibt Komponenten in eine Endlos-Render-Schleife, sobald `t` oder `i18n` in einer `useEffect`/`useMemo`-Dependency steht oder als Prop weitergereicht wird — jeder Render erzeugt neue Referenzen → Effekt feuert → Render → … (Test hängt / OOM). Die echte App memoisiert `t` intern, der naive Mock nicht.
+**Fix:** `t` und `i18n` EINMAL außerhalb der Factory erzeugen und bei jedem Aufruf dieselben Referenzen zurückgeben: `const t = (k,d)=>d||k; const i18n = { language:'de', changeLanguage: vi.fn() }; return { useTranslation: () => ({ t, i18n }), … }`. Bildet die Memoisierung der echten Library nach. Distinkt von G22 (dort fehlte die `t(key,{defaultValue})`-Signatur) — gleicher Mock, anderer Root-Cause.
+**Quellen:** `src/test-setup.ts`, `src/components/PraxisSucheStep.test.tsx` (diggai-anamnese, Commit db621b3)
+
+---
+
+## G37 — `NODE_ENV=production` an den Test-Prozess vererbt → React-Prod-Build ohne `act` → "React.act is not a function"
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `vitest`, `node-env`, `react`, `act`, `test-env`, `launcher`
+
+**Was passiert:** Ein Wrapper/Launcher (Deploy- oder `JETZT_LIVE_*`-Skript, CI-Step), der die Tests startet, vererbt `NODE_ENV=production` an den vitest-Prozess. React lädt dann seine Production-Builds, in denen die Test-API `act` fehlt → `TypeError: React.act is not a function`, obwohl Test-Code und Versionen korrekt sind. Verwandt mit, aber NICHT identisch zu G26 (dort war dieselbe Fehlermeldung ein reiner Stale-Mount-Stand) — hier ist es ein echter Environment-Leak.
+**Fix:** In `vitest.config.ts` ganz oben absichern: `if (process.env.NODE_ENV === 'production') process.env.NODE_ENV = 'test';` (vor `defineConfig`). Für einen Testlauf ist `production` nie gewollt. Bei „React.act is not a function" also immer beide Ursachen prüfen: (a) Stale Sandbox-Mount (G26), (b) geleaktes `NODE_ENV=production` (dieses).
+**Quellen:** `vitest.config.ts`, `src/components/inputs/PatientIdentify.test.tsx` (diggai-anamnese, Commit 635357b)
+
+---
+
+## G38 — jsdom hat kein IndexedDB → Tests mit IndexedDB-Persistenz brauchen `fake-indexeddb/auto`
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `vitest`, `jsdom`, `indexeddb`, `test-setup`, `dev-dependency`, `polyfill`
+
+**Was passiert:** jsdom implementiert kein IndexedDB. Tests, die Code mit IndexedDB-Persistenz ausführen (z.B. ein Key-/PIN-Store oder ein Send-Guard), brechen mit `indexedDB is not defined`/`undefined`. Gehört zur selben Familie wie G21 (localStorage-No-Op-Stub) und G23 (jsdom-Realm-Lücken): „jsdom fehlt eine Browser-API".
+**Fix:** `fake-indexeddb` als devDependency (`^6.x`) installieren und per Side-Effect-Import einschalten — in der einzelnen Test-Datei oder global im `test-setup.ts`: `import 'fake-indexeddb/auto';`. Liefert eine voll funktionsfähige In-Memory-IndexedDB für jsdom; kein Per-Methode-Mock-Stub nötig.
+**Quellen:** `package.json` (fake-indexeddb devDependency) (diggai-anamnese, Commit 81ef202)

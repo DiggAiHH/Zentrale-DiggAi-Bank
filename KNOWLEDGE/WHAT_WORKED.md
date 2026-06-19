@@ -217,3 +217,15 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 
 **Was funktioniert:** Wenn die lokale Toolchain nicht läuft (z.B. win32-Bindings in der Linux-Sandbox, G27), neue Funktionalität bewusst additiv bauen und 1:1 an bereits CI-getestete Primitive delegieren (hier: Krypto rein über die `patientKeypair`-Primitive, die neue Relay-Route 1:1 an die bestehende `v2-relay.ts` gespiegelt). Den neuen Test als Spiegel des bestehenden Tests der Primitive schreiben („grün-by-mirror"). So bleibt die Konfidenz hoch, obwohl `vitest`/`tsc` lokal nicht ausführbar sind — der spätere Lauf auf dem Host bestätigt nur noch, statt erstmals zu prüfen. Ergänzt W18 (harness-unabhängige Verifikation) und W14 (additive, by-name-Git-Hygiene).
 **Quellen:** `memory/runs/2026-06-16_cowork_opus-4-8-18.md`, `2026-06-16_cowork_opus-4-8-19.md` (diggai-anamnese, Commit ab0bb5b)
+
+---
+
+## W20 — Unter Fake-Timers `await vi.advanceTimersByTimeAsync(ms)` statt `advanceTimersByTime` + `waitFor`
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `vitest`, `fake-timers`, `async`, `waitFor`, `debounce`, `testing`
+
+**Was funktioniert:** Bei debounce-/timeout-getriebenem Code (z.B. eine Suche mit 400 ms Debounce) unter aktivierten Fake-Timers `await vi.advanceTimersByTimeAsync(400)` verwenden statt `vi.advanceTimersByTime(400)` + nachgelagertem `await waitFor(...)`. `advanceTimersByTimeAsync` flusht die Microtask-Queue ZWISCHEN Timer-Callback und Promise-Resolve — nach dem `await` ist das durch den Timer ausgelöste async-Ergebnis bereits gerendert. `waitFor` ist dann überflüssig und kann unter Fake-Timers sogar hängen (es pollt über echte Zeit, die nicht läuft).
+**Pattern:** Fake-Timers an → `fireEvent`/State-Änderung → `await vi.advanceTimersByTimeAsync(debounceMs)` → direkt asserten. Kein `waitFor` im Fake-Timer-Pfad. Ergänzt die Harness-Patterns W13/W18.
+**Quellen:** `src/components/PraxisSucheStep.test.tsx` (diggai-anamnese, Commit db621b3)

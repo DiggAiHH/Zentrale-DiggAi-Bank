@@ -170,3 +170,15 @@ Vorgänger-Agent bricht häufig vor Gates/Commit am Session-Limit ab. Etablierte
 Ein Subagent meldete einen vorhandenen Praxis-Private-Key fälschlich als ABSENT; die Eigen-Gegenprüfung im Code (`praxisResidentKeyStore.ts` + `clientCrypto.v2.ts`) belegte das Gegenteil. Lehre: Die NEGATIVE Aussage eines Subagents („Feature/Datei/Pfad fehlt") ist genauso fehleranfällig wie ein falsches Finding — und teurer, weil sie zu Doppel-Implementierung oder falschen Außen-Aussagen (z.B. einem Kunden gemeldete „Lücke", die keine ist) führt. Vor dem Handeln auf eine gemeldete Absenz immer selbst im Code verifizieren (grep/Read der genannten Pfade). Komplement zu M08 („unwiderlegt ≠ wahr").
 
 **Quellen:** `diggai-anamnese/memory/runs/2026-06-16_cowork_opus-4-8-17.md`
+
+---
+
+## M12 — Kuratiertes Critical-Flow-Gate (`test:critical`) + schriftliche Pre-Deploy-Checkliste statt Voll-Suite vor jedem Deploy
+
+**Erstmals beobachtet:** 2026-06-17 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** METHODOLOGY · Tags: `ci`, `regression-gate`, `pre-deploy`, `smoke-test`, `deploy-hygiene`
+
+**Was funktioniert:** Statt vor jedem Deploy die langsame, OOM-anfällige Voll-Suite (vgl. F12) zu fahren, ein kuratiertes Subset der wirklich kritischen Flows als eigenes Script `npm run test:critical` definieren und als Pflicht-Gate vor den Deploy hängen — flankiert von einer schriftlichen `docs/PRE_DEPLOY_CHECKLIST.md` (manuelle Punkte, die kein Test abdeckt). Schnell genug, um wirklich bei JEDEM Deploy zu laufen → fängt Regressionen, die ein übersprungener Voll-Lauf durchgelassen hätte.
+**Konkret:** Smoke-Timeouts großzügig wählen (hier 30 s → 60 s), damit Cold-Start/DNS-Flip nach dem Deploy keine False-Negatives erzeugen (vgl. G04 Cold-Start, G20 DNS). Ergänzt M04 (DoD) um ein deploy-spezifisches, ausführbares Gate.
+**Quellen:** `docs/PRE_DEPLOY_CHECKLIST.md`, `package.json` (`test:critical`), `src/components/dashboards/__smoke__/smoke.test.ts` (diggai-anamnese, Commit 8608eb6)
