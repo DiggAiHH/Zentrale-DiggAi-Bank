@@ -229,3 +229,28 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 **Was funktioniert:** Bei debounce-/timeout-getriebenem Code (z.B. eine Suche mit 400 ms Debounce) unter aktivierten Fake-Timers `await vi.advanceTimersByTimeAsync(400)` verwenden statt `vi.advanceTimersByTime(400)` + nachgelagertem `await waitFor(...)`. `advanceTimersByTimeAsync` flusht die Microtask-Queue ZWISCHEN Timer-Callback und Promise-Resolve — nach dem `await` ist das durch den Timer ausgelöste async-Ergebnis bereits gerendert. `waitFor` ist dann überflüssig und kann unter Fake-Timers sogar hängen (es pollt über echte Zeit, die nicht läuft).
 **Pattern:** Fake-Timers an → `fireEvent`/State-Änderung → `await vi.advanceTimersByTimeAsync(debounceMs)` → direkt asserten. Kein `waitFor` im Fake-Timer-Pfad. Ergänzt die Harness-Patterns W13/W18.
 **Quellen:** `src/components/PraxisSucheStep.test.tsx` (diggai-anamnese, Commit db621b3)
+
+---
+
+## W21 — Split-/Multi-Field-Input: pro Feld sofort + präzise validieren, Cross-Field-Checks hinter Feld-Plausibilität gaten
+
+**Erstmals beobachtet:** 2026-06-20 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `forms`, `validation`, `ux`, `date-input`, `react`, `a11y`
+
+**Was funktioniert:** Bei einem in Teilfelder zerlegten Input (z.B. Tag/Monat/Jahr) jedes Feld SOFORT validieren, sobald es vollständig getippt ist, mit einer feldspezifischen Meldung ("diesen Tag/Monat gibt es nicht …") statt einer pauschalen "ungültig"-Meldung erst am Ende. Cross-Field-Checks (unmöglicher Kalendertag wie 30.02., Zukunftsdatum) ERST prüfen, wenn die Einzelfelder je für sich plausibel sind — sonst doppelte/widersprüchliche Meldungen. Das fehlerhafte Feld zusätzlich via `aria-invalid` + Rahmenfarbe markieren.
+**Pattern:** Unmöglichen Kalendertag erkennen, indem man das Datum baut und den Roundtrip prüft: `const d=new Date(yy,mm-1,dd); const impossible = d.getFullYear()!==yy || d.getMonth()!==mm-1 || d.getDate()!==dd;`. Pro Teilfeld erst ab Soll-Länge prüfen (Tag/Monat 2, Jahr 4), damit nicht bei jedem Tastendruck eine Meldung blinkt.
+**Quellen:** `src/components/inputs/DateInput.tsx`, `src/components/inputs/DateInput.test.tsx` (diggai-anamnese, Commit df40bdd)
+
+
+---
+
+## W22 — Restzeit-/ETA-Anzeige aus feingranularem Fortschritt ableiten, nicht aus groben Meilensteinen
+
+**Erstmals beobachtet:** 2026-06-20 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `ux`, `progress`, `eta`, `long-form`, `wizard`
+
+**Was funktioniert:** In einem langen mehrstufigen Flow (viele Fragen/Schritte) soll "Noch ~X Min." sich mit JEDER Aktion bewegen. Leitet man die Restzeit nur aus verbleibenden Kapiteln/Meilensteinen ab, wirkt die Anzeige minutenlang "eingefroren" (kein sichtbarer Fortschritt innerhalb eines Kapitels) — das untergräbt das Vertrauen in die Anzeige. Stattdessen die Restzeit aus dem feingranularen Gesamtfortschritt (beantwortete/insg. Items) ableiten: `restMin = max(1, round(gesamtMin * (100 - prozent) / 100))`, bei 100 % → 0.
+**Pattern:** Fortschritts-Prozent über alle Items statt nur Schritt-Index; ETA als Funktion dieses Prozentwerts. Gilt für jeden Wizard/Onboarding-/Umfrage-Flow mit Zeitschätzung.
+**Quellen:** `src/components/ui/ChapterProgress.tsx` (diggai-anamnese, Commit df40bdd)

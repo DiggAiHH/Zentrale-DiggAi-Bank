@@ -507,3 +507,36 @@ _(Auto-extended by daily-sync.)_
 **Was passiert:** jsdom implementiert kein IndexedDB. Tests, die Code mit IndexedDB-Persistenz ausführen (z.B. ein Key-/PIN-Store oder ein Send-Guard), brechen mit `indexedDB is not defined`/`undefined`. Gehört zur selben Familie wie G21 (localStorage-No-Op-Stub) und G23 (jsdom-Realm-Lücken): „jsdom fehlt eine Browser-API".
 **Fix:** `fake-indexeddb` als devDependency (`^6.x`) installieren und per Side-Effect-Import einschalten — in der einzelnen Test-Datei oder global im `test-setup.ts`: `import 'fake-indexeddb/auto';`. Liefert eine voll funktionsfähige In-Memory-IndexedDB für jsdom; kein Per-Methode-Mock-Stub nötig.
 **Quellen:** `package.json` (fake-indexeddb devDependency) (diggai-anamnese, Commit 81ef202)
+
+---
+
+## G39 — Per-Minute-Rate-Limit zu streng → legitime Schnell-Nutzer bekommen 429 in Save-lastigen Formular-Flows
+
+**Erstmals beobachtet:** 2026-06-20 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `rate-limit`, `express`, `429`, `ux`, `auto-save`, `backend`
+
+**Was passiert:** Ein als Spam-Schutz gedachter `express-rate-limit` auf dem Antwort-/Save-Endpoint stand auf 30 Requests/min pro Session. In einem Formular mit vielen kurzen Fragen erzeugt ein zügiger, ehrlicher Nutzer leicht >30 Saves/min → Server antwortet mit 429 ("zu viele Antworten"), der normale Ausfüll-Fluss bricht ab. Das Limit traf reale Nutzer, nicht Angreifer.
+**Fix:** Limit am realistischen Worst-Case eines legitimen Nutzers ausrichten, nicht am theoretischen Minimum (hier 30→120/min) — Spam-Schutz bleibt, normaler Fluss passt durch. Generell: per-Minute-Limits für interaktive, auto-speichernde UIs großzügig dimensionieren und gegen den schnellsten ehrlichen Nutzer (kurze Felder = viele Saves) testen, nicht gegen den Durchschnitt.
+**Quellen:** `server/routes/answers.ts` (diggai-anamnese, Commit df40bdd)
+
+
+---
+
+## G40 — Strikte Server-Formatvalidierung (64-Zeichen-SHA-256-Hex) + Client schickt Stand-in (DataURL) → stiller 400 bei jedem POST
+
+**Erstmals beobachtet:** 2026-06-20 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `client-server-contract`, `validation`, `sha-256`, `webcrypto`, `http-400`, `frontend`
+
+**Was passiert:** Ein Upload-/Signatur-Endpoint validierte ein Feld strikt als 64-Zeichen-SHA-256-Hex. Der Client übergab als "Hash" stattdessen einen Stand-in (die Bild-DataURL der Unterschrift) → der POST scheiterte AUSNAHMSLOS mit 400 ("ungültige Eingabe"), nur als Toast sichtbar, und es wurde nie serverseitig gespeichert. Ein semantisch als "Hash" benanntes Feld bekam Nicht-Hash-Daten.
+**Fix:** Im Client den echten Wert im geforderten Format erzeugen, nicht einen Platzhalter. Browser-nativer SHA-256-Hex ohne Lib:
+```ts
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+```
+Generell: wenn ein Server ein exaktes Format erzwingt (feste Länge/Hex/Regex), den Contract clientseitig erfüllen statt etwas Ähnliches zu senden; solche Mismatches scheitern zu 100 % und wirken fälschlich wie "Server kaputt".
+**Quellen:** `src/components/SignaturePad.tsx`, `src/pages/services/ServicePageLayout.tsx` (diggai-anamnese, Commit df40bdd)
