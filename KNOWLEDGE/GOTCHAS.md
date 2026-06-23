@@ -540,3 +540,41 @@ async function sha256Hex(input: string): Promise<string> {
 ```
 Generell: wenn ein Server ein exaktes Format erzwingt (feste Länge/Hex/Regex), den Contract clientseitig erfüllen statt etwas Ähnliches zu senden; solche Mismatches scheitern zu 100 % und wirken fälschlich wie "Server kaputt".
 **Quellen:** `src/components/SignaturePad.tsx`, `src/pages/services/ServicePageLayout.tsx` (diggai-anamnese, Commit df40bdd)
+
+
+---
+
+## G41 — Globaler 401-Interceptor leert Session + redirectet mitten im legitimen Gast-/Public-Flow
+
+**Erstmals beobachtet:** 2026-06-23 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `auth`, `http-interceptor`, `401`, `spa-routing`, `guest-flow`, `session`
+
+**Was passiert:** Ein globaler HTTP-Response-Interceptor ruft bei JEDEM 401 `clearSession()` + Redirect auf die Landing-Page. In einem anonymen, mehrstufigen Gast-Flow (kein eingeloggter Nutzer) feuert ein beilaeufiger Hintergrund-401 (z.B. ein abgelaufener Refresh-Token-Call) direkt nach einem kritischen Schritt (Einwilligung/Unterschrift) und resettet den Store auf `flowStep=landing` -> der Nutzer wird zurueck an den Start geworfen, der Flow-Kontext ist weg. Zusaetzlich erkannte der Interceptor praefixierte Public-Routen (`/:prefix/...`) nicht als „im Flow" und bounced sie faelschlich auf `/`.
+**Fix:** Den Interceptor einschraenken statt global feuern zu lassen: (a) `clearSession`/Token-Removal NUR auf dem authentifizierten App-Pfad ausfuehren, nicht im Public-/Gast-Pfad; (b) praefixierte Public-Routen und anonyme Sessions explizit als „in-flow" erkennen und vom Redirect ausnehmen. Den kompletten Gast-Flow inkl. eines erzwungenen Hintergrund-401 mitten im Flow end-to-end testen. Merksatz: ein 401-Handler, der fuer eingeloggte Nutzer gedacht ist, darf anonyme/Public-Flows nicht anfassen.
+**Quellen:** `src/api/client.ts` (diggai-anamnese, Commits 162b33e, 3a5efcc)
+
+
+---
+
+## G42 — Globale Tenant-/Context-Resolve-Middleware blockt Capability-/Token-Routen vor dem Handler
+
+**Erstmals beobachtet:** 2026-06-21 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `middleware`, `multi-tenancy`, `routing`, `capability-url`, `express`, `ordering`
+
+**Was passiert:** Eine globale Middleware loest den Tenant/Mandanten aus Header/Subdomain auf und laeuft vor ALLEN Routen. Ein Capability-/Token-Endpoint, dessen Identitaet erst IM Handler aus der Ressourcen-UUID (UUID = Bearer) entsteht, schickt keinen Tenant-Header -> die Middleware lehnt mit `TENANT_NOT_FOUND` ab, bevor der Handler ueberhaupt laeuft. Der Endpoint ist tenant-agnostisch, die Middleware weiss das nicht.
+**Fix:** Tenant-/Context-Middleware fuer selbst-authentifizierende Capability-Routen (UUID/Token traegt die Identitaet) per Whitelist/Bypass ausnehmen. Generell: Middleware, die ambienten Kontext (Tenant, Session, Header) erzwingt, muss fuer Routen, die ihre Identitaet selbst mitbringen, opt-out sein — sonst stirbt der Request vor dem Handler an fehlendem Kontext, den er gar nicht braucht.
+**Quellen:** `server/middleware/tenant.ts`, `server/routes/sessions.ts` (diggai-anamnese, Commit 17cfe10)
+
+---
+
+## G43 — Anonymer, sessionloser POST-Endpoint muss explizit von CSRF ausgenommen werden
+
+**Erstmals beobachtet:** 2026-06-23 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `csrf`, `security`, `anonymous-endpoint`, `express`, `public-api`
+
+**Was passiert:** Ein global aktiver CSRF-Schutz (Token / Double-Submit-Cookie) blockt einen neu hinzugefuegten anonymen POST-Endpoint (z.B. ein oeffentlicher Relay-/Intake-Eingang). Der anonyme Aufruf hat keine Cookie-Session und damit kein CSRF-Token -> jeder legitime anonyme POST scheitert.
+**Fix:** Den anonymen, sessionlosen Endpoint explizit vom CSRF-Schutz ausnehmen — es gibt keine Cookie-Session, die ein Angreifer faelschen koennte, also greift das CSRF-Bedrohungsmodell hier nicht. Stattdessen ueber Rate-Limit, strikte Payload-Validierung, Groessenlimits und ggf. Origin-/Captcha-Checks absichern. Merksatz: CSRF schuetzt Cookie-authentifizierte state-changing Requests; ein wirklich anonymer Endpoint braucht ein anderes Modell, nicht das Token.
+**Quellen:** `server/middleware/csrf.ts` (diggai-anamnese, Commit cc34898)

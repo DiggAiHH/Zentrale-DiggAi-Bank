@@ -254,3 +254,53 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 **Was funktioniert:** In einem langen mehrstufigen Flow (viele Fragen/Schritte) soll "Noch ~X Min." sich mit JEDER Aktion bewegen. Leitet man die Restzeit nur aus verbleibenden Kapiteln/Meilensteinen ab, wirkt die Anzeige minutenlang "eingefroren" (kein sichtbarer Fortschritt innerhalb eines Kapitels) — das untergräbt das Vertrauen in die Anzeige. Stattdessen die Restzeit aus dem feingranularen Gesamtfortschritt (beantwortete/insg. Items) ableiten: `restMin = max(1, round(gesamtMin * (100 - prozent) / 100))`, bei 100 % → 0.
 **Pattern:** Fortschritts-Prozent über alle Items statt nur Schritt-Index; ETA als Funktion dieses Prozentwerts. Gilt für jeden Wizard/Onboarding-/Umfrage-Flow mit Zeitschätzung.
 **Quellen:** `src/components/ui/ChapterProgress.tsx` (diggai-anamnese, Commit df40bdd)
+
+
+---
+
+## W23 — Capability-URL (nicht-erratbare UUID = Bearer) fuer konto-losen, geraeteuebergreifenden Wiedereinstieg
+
+**Erstmals beobachtet:** 2026-06-21 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WHAT_WORKED · Tags: `capability-url`, `auth`, `cross-device`, `account-less`, `ux`, `rate-limit`, `audit`
+
+**Was funktioniert:** Damit ein Nutzer OHNE Konto einen Vorgang geraeteuebergreifend wieder aufnehmen kann, dient die vollstaendige Ressourcen-UUID als Bearer-Capability: `GET /resource/:uuid/reopen`, wobei der Besitz der nicht-erratbaren UUID die Autorisierung IST. Der Nutzer startet auf dem Desktop, oeffnet den Status-/Wiedereinstiegs-Link auf dem Handy und macht weiter — kein Login, keine Registrierung. Gegen Missbrauch mit Rate-Limit + Audit-Logging absichern.
+**Fix/Umsetzung:** UUID v4 (genug Entropie, nicht erratbar), Endpoint nur GET-idempotent, jeder Zugriff rate-limited + auditiert; Link-Wortlaut geraeteneutral halten („auf diesem Geraet" vs. „auf einem anderen Geraet"). Distinkt von klassischem Session-Auth: die Capability ersetzt das Konto, nicht ergaenzt es. Siehe verwandte Middleware-Falle [[G42]].
+**Quellen:** `server/routes/sessions.ts`, `src/pages/MeineAnfragePage.tsx`, `src/api/client.ts` (diggai-anamnese, Commit 39ef479)
+
+---
+
+## W24 — Querschnitts-Concern (E2E-Verschluesselung) an der Transport-/API-Client-Grenze isolieren — UI bleibt unberuehrt
+
+**Erstmals beobachtet:** 2026-06-23 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WHAT_WORKED · Tags: `architecture`, `separation-of-concerns`, `encryption`, `transport-layer`, `refactor`, `regression-avoidance`
+
+**Was funktioniert:** Beim Nachruesten von E2E-/Transport-Verschluesselung die gesamte Krypto im API-Client/Transport-Layer kapseln: Komponenten produzieren/konsumieren weiter KLARTEXT, der Client puffert lokal und verschluesselt erst beim Absenden. Bereits getestete Screens/Flows bleiben unveraendert -> keine UX-Regression, minimale Review-Flaeche, ein zuvor abgenommener Flow muss nicht neu abgenommen werden. „Nur-Transport"-Schnitt: der Server sieht nur Chiffrat, die UI sieht nur Klartext, die Grenze dazwischen ist die einzige Stelle mit Krypto.
+**Fix/Umsetzung:** Ver-/Entschluesseln ausschliesslich im zentralen `client.ts`/Transport-Modul; Komponenten-Props/State bleiben Klartext-Typen. Vermeidet, Krypto durch jede Komponente zu faedeln (fehleranfaellig, schwer testbar). Siehe auch [[W25]] (gleiche Runde: bestehende Komponente generalisieren statt neu bauen).
+**Quellen:** `src/api/client.ts`, `src/components/v2/ZkServiceRoute.tsx`, `src/services/signatureService.ts` (diggai-anamnese, Commit daefc27)
+
+
+---
+
+## W25 — Bewaehrte mehrstufige Komponente generalisieren/parametrisieren statt durch ein schlichteres Bespoke-Formular ersetzen
+
+**Erstmals beobachtet:** 2026-06-23 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WHAT_WORKED · Tags: `refactor`, `component-reuse`, `ux-consistency`, `regression-avoidance`, `dry`
+
+**Was funktioniert:** Mehrere Dienste waren auf ein „schlichtes Formular" abgeflacht worden und mussten zurueck auf den bewaehrten mehrstufigen Flow. Die saubere Loesung: die EINE getestete Flow-Komponente parametrisieren (hier per `serviceReason`/Titel/Typ) und fuer alle Dienste wiederverwenden — statt eine parallele, simplere Variante zu pflegen. Ergebnis: identische UX ueber alle Dienste, ein einziger Test-/Wartungspfad, keine Regression durch divergierende Zweit-Implementierung.
+**Fix/Umsetzung:** Wenn der Reflex „das ist doch nur ein einfaches Formular" aufkommt: pruefen, ob eine bereits erprobte Komponente per Props den Fall abdeckt. Generalisieren (1 Komponente, N Konfigurationen) schlaegt Forken (N Komponenten) bei UX-Paritaet und Wartung. Siehe auch [[W24]].
+**Quellen:** `src/components/v2/ZkAnamneseFlow.tsx` (diggai-anamnese, Commit 74c4d60)
+
+---
+
+## W26 — E2E/Zero-Knowledge: portablen Offline-Selbst-Entschluesseler ausliefern (Daten nicht an die eigene App/Server koppeln)
+
+**Erstmals beobachtet:** 2026-06-20 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WHAT_WORKED · Tags: `e2e`, `zero-knowledge`, `data-portability`, `offline`, `lock-in`, `ux`
+
+**Was funktioniert:** In einem Zero-Knowledge-/E2E-Produkt einen eigenstaendigen Offline-Entschluesseler plus eine selbst-entschluesselbare versiegelte Kopie ausliefern: der Nutzer (oder ein Dritter, dem er den Schluessel gibt) kann die Daten OHNE die eigene App und OHNE Server lesen, offline, portabel. Das verhindert Vendor-Lock-in, ueberlebt einen Infra-Ausfall und untermauert das Versprechen „wir koennen es nicht lesen — du immer".
+**Fix/Umsetzung:** Eine schlanke Decrypt-Viewer-Seite, die nur den Schluessel + das Chiffrat braucht und clientseitig entschluesselt (kein Backend-Call). Versiegelte Kopie als herunterladbares, in sich geschlossenes Artefakt. Wichtig: der Viewer darf keine App-/Server-Abhaengigkeit haben, sonst ist die Portabilitaet nur scheinbar.
+**Quellen:** `src/lib/patientSelfRecord.ts`, `src/pages/PatientDecryptPage.tsx` (diggai-anamnese, Commit f809a1e)
