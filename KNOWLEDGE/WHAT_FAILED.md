@@ -63,7 +63,9 @@ _(Auto-extended by daily-sync.)_
 
 ---
 
-## F05 — Anonyme ChatGPT/Codex-Sessions
+## F80 — Anonyme ChatGPT/Codex-Sessions
+
+> _Hinweis: früher als F05 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf F80 umnummeriert (Inhalt unverändert)._
 
 **Erstmals beobachtet:** 2026-05-13 in JoBetes (Multi-Agent-Sprint)
 **Beobachtet in:** JoBetes

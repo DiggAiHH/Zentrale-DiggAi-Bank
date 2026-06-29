@@ -81,7 +81,9 @@ _(Auto-extended by daily-sync.)_
 
 ---
 
-## M05 — Fork-Workflow als Notfall-Push (ohne Collaborator-Access)
+## M80 — Fork-Workflow als Notfall-Push (ohne Collaborator-Access)
+
+> _Hinweis: früher als M05 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf M80 umnummeriert (Inhalt unverändert)._
 
 **Quelle:** JoBetes (Sync 2026-05-19)
 **Tags:** `git`, `fork`, `collaboration`, `push`
@@ -98,7 +100,9 @@ Vorteil: keine Wartezeit, kein Verlust von Commits. Nachteil: PRs gehen aus Fork
 
 ---
 
-## M06 — Multi-Agent-Sprint mit klaren Tool-Slots
+## M81 — Multi-Agent-Sprint mit klaren Tool-Slots
+
+> _Hinweis: früher als M06 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf M81 umnummeriert (Inhalt unverändert)._
 
 **Quelle:** JoBetes (Sync 2026-05-19)
 **Tags:** `multi-agent`, `parallel-work`, `tool-slots`
@@ -109,7 +113,9 @@ Jeder Agent kriegt klar definierten Tool-Slot (Chrome-Tab, IDE-Extension, CLI). 
 
 ---
 
-## M07 — Domain-Pivot mit Pflicht-Compliance-Recheck
+## M82 — Domain-Pivot mit Pflicht-Compliance-Recheck
+
+> _Hinweis: früher als M07 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf M82 umnummeriert (Inhalt unverändert)._
 
 **Quelle:** JoBetes (IST-Audit 2026-05-11)
 **Tags:** `compliance`, `mdr`, `ai-act`, `pivot`

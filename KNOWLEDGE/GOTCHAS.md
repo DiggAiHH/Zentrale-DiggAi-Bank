@@ -127,7 +127,9 @@ _(Auto-extended by daily-sync.)_
 
 ---
 
-## G07 — Magic-Link Rate-Limit bei Supabase Auth
+## G80 — Magic-Link Rate-Limit bei Supabase Auth
+
+> _Hinweis: früher als G07 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf G80 umnummeriert (Inhalt unverändert)._
 
 **Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
 **Beobachtet in:** JoBetes
@@ -138,7 +140,9 @@ _(Auto-extended by daily-sync.)_
 
 ---
 
-## G08 — PWA Add-to-Home-Screen ist Browser-fragmentiert
+## G81 — PWA Add-to-Home-Screen ist Browser-fragmentiert
+
+> _Hinweis: früher als G08 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf G81 umnummeriert (Inhalt unverändert)._
 
 **Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
 **Beobachtet in:** JoBetes
@@ -149,7 +153,9 @@ _(Auto-extended by daily-sync.)_
 
 ---
 
-## G09 — Browser drosselt JS in Background-Tab
+## G82 — Browser drosselt JS in Background-Tab
+
+> _Hinweis: früher als G09 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf G82 umnummeriert (Inhalt unverändert)._
 
 **Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
 **Beobachtet in:** JoBetes
@@ -160,7 +166,9 @@ _(Auto-extended by daily-sync.)_
 
 ---
 
-## G10 — Service-Worker cached kaputten Build nach Deploy
+## G83 — Service-Worker cached kaputten Build nach Deploy
+
+> _Hinweis: früher als G10 geführt; am 2026-06-29 zur Auflösung einer ID-Kollision auf G83 umnummeriert (Inhalt unverändert)._
 
 **Erstmals beobachtet:** 2026-05-13 in JoBetes (Sync 2026-05-19)
 **Beobachtet in:** JoBetes
