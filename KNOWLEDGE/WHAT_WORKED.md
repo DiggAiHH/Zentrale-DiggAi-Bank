@@ -304,3 +304,111 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 **Was funktioniert:** In einem Zero-Knowledge-/E2E-Produkt einen eigenstaendigen Offline-Entschluesseler plus eine selbst-entschluesselbare versiegelte Kopie ausliefern: der Nutzer (oder ein Dritter, dem er den Schluessel gibt) kann die Daten OHNE die eigene App und OHNE Server lesen, offline, portabel. Das verhindert Vendor-Lock-in, ueberlebt einen Infra-Ausfall und untermauert das Versprechen „wir koennen es nicht lesen — du immer".
 **Fix/Umsetzung:** Eine schlanke Decrypt-Viewer-Seite, die nur den Schluessel + das Chiffrat braucht und clientseitig entschluesselt (kein Backend-Call). Versiegelte Kopie als herunterladbares, in sich geschlossenes Artefakt. Wichtig: der Viewer darf keine App-/Server-Abhaengigkeit haben, sonst ist die Portabilitaet nur scheinbar.
 **Quellen:** `src/lib/patientSelfRecord.ts`, `src/pages/PatientDecryptPage.tsx` (diggai-anamnese, Commit f809a1e)
+
+---
+
+## W27 — Single-Host-Assert-Guard gegen versehentliche Calls an eine abgehaengte (alte) DB/Host
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `guardrail`, `fail-closed`, `env-vars`, `database`, `host-cutover`, `stale-config`
+
+**Was passiert:** Nach einem Host-Cutover blieb eine alte DB-URL (neon.tech) als Ueberrest existent. Eine Streu-URL in .env/Config liess Migrations-Diffs/Skripte versehentlich die abgehaengte DB treffen -> falsche 'fehlt alles'-Diagnosen.
+**Fix:** Ein 'assert:single-host'-Skript scannt dist/ + Configs und bricht fail-closed ab, sobald Alt-Hosts (neon.tech/fly.dev/*.netlify.app o.ae.) auftauchen. Lokale .env strikt auf den kanonischen Host (localhost/Prod) zwingen. Diesen Waechter nicht entfernen.
+**Quellen:** `docs/COWORK_ENV_FOOTGUNS.md (commit 35c976b)` (diggai-anamnese)
+
+---
+
+## W28 — Catch-all/None-Wert-Exklusivitaet global zentralisieren statt pro Multiselect
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `forms`, `multiselect`, `dry`, `shared-component`, `input-validation`
+
+**Was passiert:** In ~100 Multiselect-Feldern muss 'Keine/Egal/Nichts davon' alle anderen Optionen exklusiv abwaehlen. Pro-Feld-Logik waere fehleranfaellig und driftet.
+**Fix:** Eine zentrale NONE_VALUES-Liste + generische Exklusivitaets-Logik in der einen Multiselect-Komponente -> gilt automatisch fuer ALLE Instanzen, mit einem Test fuer das Verhalten. Cross-cutting-Verhalten gehoert in die gemeinsame Komponente, nicht in jede Verwendung.
+**Quellen:** `commit dfc53cd (MultiSelectInput exclusive)` (diggai-anamnese)
+
+---
+
+## W29 — Neue Features hinter Default-OFF Tenant-Feature-Flag + Zero-Regression-Property-Test
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `feature-flags`, `default-off`, `zero-regression`, `property-test`, `multi-tenant`, `safety`
+
+**Was passiert:** Riskante/regulatorisch relevante Verhaltensaenderungen (z.B. Schritte ueberspringen) duerfen Bestandsverhalten nicht still aendern.
+**Fix:** Flag default OFF und an JEDER Stelle spiegeln, die es ausliefert (Client-Defaults UND Server-Route, sonst liefert die API es nicht aus). Ein Zero-Regression-Property-Test nageln, der bei Flag=OFF exakt das alte Verhalten beweist. Die Flag-Resolution selbst testen: Defaults, Kopie-statt-shared-Default, nur boolesche Overrides zaehlen (String 'true' != true), unbekannte/kaputte Settings -> Defaults.
+**Quellen:** `commits 352890f, 6b01684 (featureFlags + decisionBranch)` (diggai-anamnese)
+
+---
+
+## W30 — Neue UI als eigenstaendiges, additives Overlay statt Eingriff in den fragilsten Kern-Render-Pfad
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `architecture`, `additive-change`, `blast-radius`, `overlay`, `fragile-core`, `refactor-avoidance`
+
+**Was passiert:** Ein bekannt fragiler Kern (Frage-Render-Gate/SyncEffect) sollte nicht angefasst werden, um neue Review-/Bestaetigungs-Schritte zu ergaenzen.
+**Fix:** Neues Feature als eigenstaendige, reine Praesentations-Komponente (Overlay/Dialog, Muster vorhandener Dialoge) bauen, die NICHT an den fragilen Render-Gate koppelt -> kann den Kernfluss nicht stoeren. Additiv, kein Routing-Eingriff. Identifiziere die 'heisseste'/fragilste Datei vorab (aus Run-Logs/Harness) und arbeite bewusst daran vorbei.
+**Quellen:** `commits 21f7520, db0393b (PrefillReviewScreen / ChapterProgress)` (diggai-anamnese)
+
+---
+
+## W31 — Eine Quelle fuer abgeleitete Datensaetze (Notfall-/Profil-Datensatz aus der erfassten Vorgeschichte ableiten)
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** WORKED · Tags: `single-source-of-truth`, `derived-data`, `data-model`, `consistency`
+
+**Was passiert:** Mehrere Sichten (z.B. dauerhaftes Patientenprofil und ein abgeleiteter Notfalldatensatz) drohen auseinanderzudriften, wenn beide unabhaengig erfasst werden.
+**Fix:** Nur EINE Erfassungs-/Speicher-Quelle pflegen und die anderen Sichten daraus ableiten (Notfalldatensatz wird aus dem gespeicherten Profil abgeleitet, nicht separat eingegeben). Verhindert Drift und doppelte Pflege.
+**Quellen:** `commits 815daa0, db0393b (GesundheitsakteAnlegenPage / SubmittedPage)` (diggai-anamnese)
+
+---
+
+## W32 — WebSocket-Signaling als reines JSON-Relay lokal mit zwei `websockets`-Clients voll E2E-testbar — kein Coturn/Browser nötig
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** WORKED · Tags: `websocket`, `signaling`, `webrtc`, `integration-test`, `two-client`, `verification`
+
+**Was passiert:** Annahme, der Signaling-/WebRTC-Pfad sei 'ohne Infra untestbar' — dadurch blieben uuid/str- und Identitäts-Bugs strukturell unentdeckt. Ursache: Reine Funktions-/Unit-Tests fahren den echten WS-Handshake + DB-Row-Lookup nie ab; der Signaling-Layer ist aber nur ein JSON-Relay (Coturn nur für den Medien-Transport nötig).
+**Fix:** Echter Zwei-WS-Client-Integrationstest (`websockets`-Lib) gegen den laufenden Server: Therapist+Session direkt in DB, zwei Shim-Tokens, Protokoll `auth→join→offer→answer` durchspielen. Fand reale Bugs (UUID-Vergleich, sub vs PK). Regel: Die Grenze 'braucht echte Infra' so spät wie möglich ziehen: Application-Protokolle (WS-Signaling) sind mit zwei echten Clients + DB-Rows lokal E2E-testbar; nur der Medien-/Transport-Layer (RTP/ICE/TURN) braucht echte Infra. Integrationstests fangen Bugs, die Unit-Tests strukturell verfehlen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## W33 — Admin-Aggregate über RLS-geschützte Klinik-Daten via `SECURITY DEFINER`-Funktion (nur Aggregate), nicht via breiter Read-Policy
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** WORKED · Tags: `postgres`, `rls`, `security-definer`, `admin`, `aggregate`, `privacy`, `governance`
+
+**Was passiert:** Admin-Dashboard zeigte unter Prod-RLS überall 0 (patients/sessions/scores), weil die RLS-Tabellen keine Admin-Read-Policy hatten. Ursache: Admin braucht Kennzahlen über sensible Tabellen, aber eine breite Admin-Read-Policy würde Row-Level-Zugriff auf vertrauliche Klinik-Daten gewähren (Governance-/Datenschutz-Grenze).
+**Fix:** `SECURITY DEFINER`-Funktionen (mit gelocktem `SET search_path`) liefern NUR Aggregate/pseudonymisierbare IDs — Admin bekommt Kennzahlen ohne Row-Level-Leserechte auf die Rohdaten. Regel: Wenn eine privilegierte Rolle Kennzahlen über RLS-geschützte sensible Daten braucht, einen schmalen `SECURITY DEFINER`-Aggregat-Pfad bauen statt einer breiten Read-Policy — so bleibt die Zugriffs-Grenze gewahrt. Die Grenze ist eine Governance-Entscheidung, kein Tech-Default.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## W34 — TURN-Credentials gegen ECHTES Coturn verifizieren (turnutils_uclient) — der verifizierbare Code-Anteil des Medienpfads
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** WORKED · Tags: `webrtc`, `coturn`, `turn`, `hmac`, `credentials`, `verification`, `integration-test`
+
+**Was passiert:** Annahme, der gesamte Medienpfad sei lokal unverifizierbar — dabei ist die Credential-Generierung der prüfbare Code-Anteil. Ursache: Das HMAC-Credential-Format muss exakt zu Coturns `static-auth-secret`/REST-API-Mechanismus passen; ein Format-Mismatch fällt erst gegen echtes Coturn auf.
+**Fix:** Coturn per Docker hochfahren (`--use-auth-secret --static-auth-secret=...`), Credentials minten (username=`<expiry>:<sid>`, credential=base64(HMAC-SHA1(secret, username))) und mit `turnutils_uclient` einen vollen Relay (connect→allocate→transmit) prüfen; Negativtest mit falschem Credential → EXIT 255. Regel: Bei Infra-abhängigen Features den eigenen Code-Anteil isolieren und gegen die echte Infra in einem Container verifizieren (positiv + negativ). 'Braucht Infra' heißt selten 'gar nicht testbar' — der Code-Vertrag ist meist prüfbar.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## W35 — Lokaler Schema-Bootstrap via raw-SQL-Loader statt kaputter Migrations-Kette; fail-soft Lifespan/Router für optionale Subsysteme
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** WORKED · Tags: `alembic`, `raw-sql`, `schema-bootstrap`, `fastapi`, `fail-soft`, `lifespan`, `dev-setup`
+
+**Was passiert:** `alembic upgrade head` → "Can't locate revision 020" (Kette nicht bootstrap-fähig); App-Import scheiterte an optionalen Subsystemen (RAG/Voice mit schweren/Windows-inkompatiblen Deps). Ursache: Die Alembic-`versions/` waren lückenhaft (down_revision auf nicht existierende Rev). Optionale Subsysteme mit harten Imports blockierten den gesamten App-Start.
+**Fix:** Rohe `NNN_*.sql`-Migrationen als Source-of-Truth in Reihenfolge via psql anwenden (Bootstrap-Skript) statt sich lokal auf Alembic zu verlassen. Optionale Subsysteme fail-soft laden (dev: warn+weiter, prod: raise); nicht-Kern-Router fail-soft mounten, damit ein kaputter Optional-Router die Journey nicht blockt. Regel: Bei lückenhafter Migrations-Kette die raw-SQL-Migrationen als Schema-Orakel behandeln und mit einem deterministischen Loader bootstrappen. Optionale/schwere Subsysteme fail-soft (dev warn / prod raise) laden, damit der Kern-Flow lauffähig bleibt.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)

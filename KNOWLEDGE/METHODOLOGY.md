@@ -188,3 +188,123 @@ Ein Subagent meldete einen vorhandenen Praxis-Private-Key fälschlich als ABSENT
 **Was funktioniert:** Statt vor jedem Deploy die langsame, OOM-anfällige Voll-Suite (vgl. F12) zu fahren, ein kuratiertes Subset der wirklich kritischen Flows als eigenes Script `npm run test:critical` definieren und als Pflicht-Gate vor den Deploy hängen — flankiert von einer schriftlichen `docs/PRE_DEPLOY_CHECKLIST.md` (manuelle Punkte, die kein Test abdeckt). Schnell genug, um wirklich bei JEDEM Deploy zu laufen → fängt Regressionen, die ein übersprungener Voll-Lauf durchgelassen hätte.
 **Konkret:** Smoke-Timeouts großzügig wählen (hier 30 s → 60 s), damit Cold-Start/DNS-Flip nach dem Deploy keine False-Negatives erzeugen (vgl. G04 Cold-Start, G20 DNS). Ergänzt M04 (DoD) um ein deploy-spezifisches, ausführbares Gate.
 **Quellen:** `docs/PRE_DEPLOY_CHECKLIST.md`, `package.json` (`test:critical`), `src/components/dashboards/__smoke__/smoke.test.ts` (diggai-anamnese, Commit 8608eb6)
+
+---
+
+## M13 — Inhaltliche/regulatorische Entscheidungen NICHT autonom verfassen — neutraler Platzhalter + Verweis an Fachverantwortliche
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** METHODOLOGY · Tags: `regulatory`, `scope-discipline`, `placeholder`, `404-fix`, `content-ownership`, `guardrail`
+
+**Was passiert:** Ein patientensichtbarer Footer-Link zeigte auf eine fehlende Route (404). Der eigentliche Inhalt (Bedienungsanleitung) ist eine fachliche/regulatorische Entscheidung.
+**Fix:** Den technischen Defekt (404) sofort beheben, aber NUR mit neutralem Platzhalter ('Seite in Vorbereitung' + Verweis an die zustaendige Stelle) ohne fachliche/diagnostische Aussagen. Den fachlichen Inhalt explizit der verantwortlichen Person ueberlassen. Trennt 'Tech-Fix' (autonom ok) sauber von 'Domain-Content' (gated).
+**Quellen:** `commit ce07844 (IfuPage Platzhalter)` (diggai-anamnese)
+
+---
+
+## M14 — Unit-Tests grün ≠ läuft — Live-Smoke gegen echtes Postgres + echten Token; Mapper-/Spalten-/Enum-Drift ist bis zur ersten echten Query unsichtbar
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `verification`, `live-smoke`, `postgres`, `orm-drift`, `mock-db`, `sqlalchemy`, `fastapi`
+
+**Was passiert:** Routen mit grüner Mock-DB-Test-Suite warfen live 500er: Spalten-Drift (`column ... does not exist`), Enum-Bind-Fehler, `NoForeignKeysError` (nur zur Query-Zeit, nicht beim Import), `from_attributes`-Fehlaufrufe. Allein eine Usability-Route hatte drei Bugs, alle erst im Live-Smoke sichtbar. Ursache: Mock-DB-/same-origin-ASGI-Tests führen den echten SQL-Pfad nie aus. SQLAlchemy bindet Spaltennamen LAZY → `import app.main` (Route-Count) fängt Drift NICHT; Mapper-Config-Fehler (fehlende FK) surfacen erst beim ersten echten SELECT.
+**Fix:** Verlässlicher Sweep: `\d <table>` live gegen jedes ORM-Model diffen + einen echten `SELECT * LIMIT 1` durch jedes Model laufen lassen + voller `pytest --no-cov`. Plus echter `curl`/httpx-Call mit echtem Token gegen die laufende API (echtes Postgres). Regel: Für jeden DB-gebundenen Endpoint mindestens einen Live-Smoke gegen echte DB + echten Token fahren. DB-Schema (information_schema/`\d`) ist Source-of-Truth gegen das ORM. `import`-Erfolg und grüne Mocks beweisen weder Schema-Konsistenz noch Mapper-Korrektheit.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M15 — Bei rotem Test zuerst fragen: Produkt-Bug oder Test-Harness/Mock-Bug? — unvollständige App-Fixtures und naive Settings-Mocks erzeugen Phantom-Fails
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `testing`, `pytest`, `fixtures`, `mock`, `false-positive`, `verification`, `fastapi`
+
+**Was passiert:** 41 Tests rot mit 404, obwohl der Router live erreichbar ist; ein 'wrong-token'-Test → 500 statt 401. In einem Sweep waren 42 von 48 Failures Test-Infrastruktur, nicht Produkt. Ursache: (a) Die conftest-`app`-Fixture baute ein MINIMALES App (nur einige Router) → Router-under-Test fehlten → 404. (b) `MagicMock(INTERNODE_SECRET=...)` vivifiziert `INTERNODE_SECRET_PREV` automatisch als truthy Mock → `secret_prev.encode()` gibt MagicMock → `hmac.compare_digest` TypeError → 500 (Prod safe, weil Default None).
+**Fix:** Router-under-Test in die Fixture aufnehmen; Settings-Mock ALLE vom Code gelesenen Felder explizit modellieren (`INTERNODE_SECRET_PREV=None`). Erst `\d`/curl gegen die echte App prüfen, bevor man einen Produkt-Bug annimmt. Regel: Roten Test immer erst als möglichen Harness-/Mock-Bug einordnen (minimale Fixture, MagicMock-Auto-Vivification truthy). Gegen die echte laufende App gegenprüfen, bevor man am Produkt 'fixt' — sonst baut man echte Bugs ein.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M16 — Mock-only-Test ist kein SDK-Vertrags-Beweis — externe SDKs mit Residency/Auth-Wirkung brauchen einen non-mocked URL-/Konstruktions-Assert
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `verification`, `sdk-contract`, `mock`, `data-residency`, `url-assertion`, `adversarial-review`, `llm`
+
+**Was passiert:** Ein 'Fix' eines Residency-Guards baute einen production-breaking HTTP 404 bei JEDEM Prod-LLM-Call ein (inkompatible Host↔Pfad↔Auth-Kombi des SDK). Alle Tests blieben grün — der einzige Beweis war ein Mock. Erst eine adversariale Review mit Live-URL-Probe fand es. Ursache: Das SDK spricht zwei Backends mit inkompatiblen URL-Shapes (Developer-API mit api_key/Host A/Pfad X vs Vertex mit project+location/Host B/Pfad Y). Ein base_url-Override mischte sie zu einer strukturell ungültigen Request-URL. Mock-Tests verifizieren den SDK-Vertrag (Host/Pfad/Auth) nie.
+**Fix:** Eine einzige Factory, die den Modus explizit macht (die kaputte Kombi ist nicht mehr ausdrückbar). PLUS ein NON-mocked Konstruktions-/URL-Assert-Test, der die echte gebaute Request-URL introspektiert (ohne Netz-Call) und bricht, wenn Host↔Pfad↔Auth inkompatibel werden. Regel: Für jede externe-SDK-Integration mit Residency-/Auth-Wirkung mindestens einen non-mocked Vertrags-Test (echte gebaute URL/Request introspektieren). 'Grün weil gemockt' ist kein Beweis. Und: ein Fix kann der nächste, schlimmere Bug sein — frisch committete Arbeit adversarial gegenprüfen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M17 — Pin-/Versions-Werte an mehreren Stellen halten (Drei-Quellen-Regel) — jede Änderung in EINEM Commit mit Vollständigkeits-Check
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `dependencies`, `version-pinning`, `drift`, `ci`, `single-commit`, `consistency`
+
+**Was passiert:** Python-Versionen lebten an DREI Stellen (`pyproject.toml`, lokales `setup-venv`-Skript mit kuratierter Windows-Liste, CI-Workflow) → Drift-Gefahr bei jeder Pin-Änderung. Ursache: Dieselbe Versionsangabe ist über mehrere Build-/CI-/Dev-Dateien dupliziert ohne Single-Source.
+**Fix:** Drei-Quellen-Regel: jede Pin-Änderung aktualisiert ALLE Stellen in einem Commit, scriptgesteuert via Replace-Map mit Vollständigkeits-Check ('missing keys: none'). Regel: Duplizierte Versions-/Pin-Werte explizit als Set führen und bei jeder Änderung atomar (ein Commit) mit Vollständigkeits-Assertion aktualisieren — sonst driften Build, CI und Dev-Setup auseinander.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M18 — Dependency-Pins ohne Audit-Routine sammeln stille CRITICAL-CVEs — je Pin OSV.dev + Registry-Latest, minimal-korrekte Bumps, Suite als Gate
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `security`, `dependencies`, `cve`, `osv`, `audit`, `supply-chain`
+
+**Was passiert:** Stack trug 2 Jahre alte Pins mit 2× CRITICAL (Middleware-Auth-Bypass-CVE; JWT-Algorithm-Confusion-CVE im Validator) + dutzenden HIGH — unbemerkt, weil nie systematisch geprüft. Ursache: Pins wurden ohne wiederkehrende Audit-Routine gesetzt; npm audit/pip-audit/OSV liefen nie.
+**Fix:** Methode: je Pin OSV.dev-Query (`api.osv.dev/v1/query`) + Registry-Latest + Fixed-in-Versionen je CVE → minimal-korrekte Bumps. Reihenfolge: erst Security-Pins innerhalb des Majors, volle Test-Suite + E2E als Gate, Major-Upgrades als geplante Follow-ups. Regel: Dependency-Pins regelmäßig gegen OSV.dev/Registry auditieren. Security-Bumps minimal und innerhalb der Major halten, mit der Suite als Gate; Major-Upgrades separat planen. Alte Pins sind eine stille Akkumulation von CVEs.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M19 — Alten Audit-/Bug-Backlog vor dem Abarbeiten gegen den AKTUELLEN Code + LIVE DB verifizieren — die Hälfte war längst gefixt
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `backlog`, `verification`, `stale-list`, `audit`, `live-db`, `methodology`
+
+**Was passiert:** Ein Mai-Audit-Backlog war zu ~50% durch zwischenzeitliche Juni-Refaktorierung längst gefixt; blindes Abarbeiten hätte Doppelarbeit/Regressions erzeugt. Ursache: Die Bug-Liste war stale — sie spiegelte nicht den zwischenzeitlich refaktorierten Code/DB-Stand.
+**Fix:** Vor dem Abarbeiten jedes Backlog-Items gegen den aktuellen Code und die LIVE-DB prüfen, ob es noch offen ist. Nicht-launch-blockierende Items bewusst mit Begründung aufschieben. Regel: Jeden geerbten Backlog/Findings-Report als LEAD behandeln, nicht als Wahrheit — jedes Item gegen den aktuellen Stand re-verifizieren, bevor man handelt (verwandt: Subagent-Funde gegenprüfen).
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M20 — Parallel-Survey-/Sub-Agent-Funde sind LEAD, nicht Wahrheit — Zeilennummern driften, Vollständigkeit nicht garantiert; jeden Fund selbst gegenprüfen
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `multi-agent`, `subagent`, `survey`, `false-negative`, `dead-code`, `verification`
+
+**Was passiert:** 4 Parallel-Survey-Agents lieferten teils falsche Zeilennummern UND übersahen Funde: der Dead-Code-Agent flaggte 6 tote Dateien, übersah aber eine 7. (473 Zeilen, 0 Imports) — die erst die eigene Verifikation fand. Ursache: Sub-Agent-Output ist näherungsweise: Zeilennummern driften, Vollständigkeit ist nicht garantiert, sowohl falsch-positive als auch falsch-negative Funde kommen vor.
+**Fix:** Jeden Survey-Fund vor der Umsetzung selbst verifizieren (`grep -rn "from .*<Component>"` → 0 Imports = wirklich tot; Header-Presence, Query-Pattern selbst checken). Regel: Multi-Agent-Survey-Ergebnisse als Hinweise behandeln, nie als verifizierte Wahrheit — sowohl positive Funde als auch gemeldete Absenzen ('X existiert nicht') eigenständig im Code gegenprüfen, bevor man handelt.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M21 — Enforcing CSP nie ohne prod-gleiche Verifikation shippen — lokales `next start` liefert falsche MIME-Typen und korrumpiert das CSP-Signal; Report-Only zuerst
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `csp`, `security`, `next`, `mime`, `report-only`, `staging`, `frontend`
+
+**Was passiert:** Strikte CSP lokal nicht verifizierbar: `next start` + `output:standalone` serviert `_next/static/*` als `text/plain` (Windows) → mit `nosniff` refused der Browser alle Scripts/Styles + ein `unsafe-eval`-EvalError. Sieht aus wie kaputte CSP, ist aber ein MIME-Artefakt der lokalen Serve-Methode. Ursache: Lokales `next start` ≠ Prod-Serving (Prod = nginx/standalone mit korrektem MIME). Das MIME-Artefakt korrumpiert das CSP-Enforcement-Signal.
+**Fix:** CSP zuerst als `Content-Security-Policy-Report-Only` ausrollen (Nonce trotzdem auf Request-Header), Enforcing erst nach Staging-Verifikation mit korrektem MIME + Report-Collector-Review. Regel: Enforcing-Security-Header (CSP) niemals auf Basis lokaler Serve-Signale aktivieren — lokale Serve-Methoden liefern oft falsche MIME-Typen. Report-Only zuerst, Enforcing erst nach Verifikation in prod-gleicher Umgebung.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## M22 — Vor E2E auf Windows ALLE node-Prozesse killen — Server-Müll aus vielen Dev/Start-Läufen auf demselben Port erzeugt scheinbare 'Regressions'
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** METHODOLOGY · Tags: `e2e`, `playwright`, `windows`, `stale-server`, `port`, `false-positive`, `node`
+
+**Was passiert:** E2E meldete '2 failed' als scheinbare Regression — tatsächlich connectete Playwright (kein `webServer` in der Config) zu einem stalen/kaputten Dev-Server auf :3000 ('Internal Server Error'), Rest aus vielen `npm run dev`/`next start` derselben Session. Ursache: Viele Server über eine Session auf demselben Port hinterlassen Windows-Prozess-Müll; ohne `webServer`-Config trifft der Test einen toten Altserver.
+**Fix:** Vor E2E ALLE node-Prozesse killen (`taskkill /F /IM node.exe`), EINEN sauberen Dev-Server starten, `/de`=200 verifizieren, DANN testen. Backend (python:8000) bleibt unberührt. Regel: Rote E2E zuerst als Umgebungs-Artefakt verdächtigen (staler Server, falscher Port), nicht als Code-Regression. Vor jedem Lauf einen sauberen, warm-kompilierten Server erzwingen und mit einem 200-Probe bestätigen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)

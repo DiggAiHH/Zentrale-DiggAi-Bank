@@ -586,3 +586,351 @@ Generell: wenn ein Server ein exaktes Format erzwingt (feste Länge/Hex/Regex), 
 **Was passiert:** Ein global aktiver CSRF-Schutz (Token / Double-Submit-Cookie) blockt einen neu hinzugefuegten anonymen POST-Endpoint (z.B. ein oeffentlicher Relay-/Intake-Eingang). Der anonyme Aufruf hat keine Cookie-Session und damit kein CSRF-Token -> jeder legitime anonyme POST scheitert.
 **Fix:** Den anonymen, sessionlosen Endpoint explizit vom CSRF-Schutz ausnehmen — es gibt keine Cookie-Session, die ein Angreifer faelschen koennte, also greift das CSRF-Bedrohungsmodell hier nicht. Stattdessen ueber Rate-Limit, strikte Payload-Validierung, Groessenlimits und ggf. Origin-/Captcha-Checks absichern. Merksatz: CSRF schuetzt Cookie-authentifizierte state-changing Requests; ein wirklich anonymer Endpoint braucht ein anderes Modell, nicht das Token.
 **Quellen:** `server/middleware/csrf.ts` (diggai-anamnese, Commit cc34898)
+
+---
+
+## G44 — Eine einzige Streu-HTML in public/ mit Google-Fonts blockt den GANZEN DSGVO-gegateten Deploy
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `dsgvo`, `deploy-gate`, `google-fonts`, `self-hosted-fonts`, `static-assets`, `footgun`
+
+**Was passiert:** Das Deploy-Skript bricht am DSGVO-Check ab, sobald IRGENDEINE Datei in dist/ (=aus public/) fonts.googleapis.com/fonts.gstatic.com referenziert. Eine ungetrackte Dev-Visitenkarte (public/entwickler.html) mit Google-Fonts hat so den kompletten Frontend-Deploy gestoppt. Das Gate ist korrekt (Fonts muessen self-hosted sein).
+**Fix:** Vor dem Deploy pruefen: grep -rliE 'fonts\.googleapis|fonts\.gstatic' public --include='*.html' MUSS leer sein. Treffer -> Fonts self-hosten ODER die Datei aus public/ rausnehmen (z.B. nach dev-pages/, wird nicht gebaut). Dev-/Streu-HTML gehoert nicht nach public/.
+**Quellen:** `docs/COWORK_ENV_FOOTGUNS.md, docs/PRE_DEPLOY_CHECKLIST.md (commit 35c976b)` (diggai-anamnese)
+
+---
+
+## G45 — `SET LOCAL x = :param` ist gegen echtes Postgres ein Syntaxfehler — `SET LOCAL` akzeptiert keine Bind-Parameter
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `set-local`, `bind-params`, `set-config`, `asyncpg`, `python`
+
+**Was passiert:** Jeder Endpoint, der per-Request-Kontext setzt, wirft `syntax error at or near "$1" [SQL: SET LOCAL app.current_user_id = $1]` → 500. Trat in 4 Dateien auf (notes/sessions Router + patient/session Services). Ursache: `SET LOCAL <var> = <wert>` ist reines SQL und akzeptiert KEINE gebundenen Parameter ($1). Mock-DB-Tests führen das Statement nie gegen echtes Postgres aus und maskieren den Fehler komplett.
+**Fix:** Die parametrisierbare, transaktions-lokale Variante nutzen: `SELECT set_config('app.current_user_id', :uid, true)`. Funktioniert mit Bind-Params und ist ebenfalls transaktions-lokal (3. Arg = is_local=true). Regel: Session-/GUC-Variablen, die zur Laufzeit aus User-Input gesetzt werden, IMMER via `set_config(name, value, is_local)` setzen — nie via `SET LOCAL` mit Platzhalter.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G46 — asyncpg liefert uuid-Spalten als UUID-Objekte → vor String-Vergleich UND in Pydantic-Response-Models `str()` erzwingen
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `asyncpg`, `uuid`, `postgres`, `pydantic`, `fastapi`, `type-coercion`, `python`
+
+**Was passiert:** (1) Berechtigungs-Check `patient_id != user_id` ist IMMER True → WS lehnt jeden gültigen Teilnehmer ab (1008 Not authorized), obwohl die IDs gleich sind. (2) `GET /sessions/{id}` → 500 `Input should be a valid string [input_value=UUID(...)]` aus Response-Models mit `id: str`. Ursache: asyncpg deserialisiert uuid-Spalten als Python-`UUID`-Objekte, nicht als Strings. `UUID(...) != 'gleicher-string'` ist immer True; und Pydantic `str`-Felder lehnen ein UUID-Objekt ab. Reine Funktions-/Mock-Tests fangen das nie (dort sind die Werte Strings).
+**Fix:** Beim Vergleich: `str(uuid_col) != str(jwt_sub)`. In Pydantic-v2-Response-Models, die aus `row._mapping` gebaut werden: `@field_validator('id', mode='before')` UUID→str-Koersion an JEDEM betroffenen Feld. Regel: Bei asyncpg jede uuid/timestamptz-Spalte als nativen Python-Typ behandeln: vor String-Vergleich `str()`, in Response-Schemas eine Before-Validator-Koersion. Gilt für jedes Model, das aus rohen SQL-Rows konstruiert wird.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G47 — Dev-DB-Rolle als SUPERUSER+BYPASSRLS maskiert JEDEN RLS-Bug systematisch — unter NOBYPASSRLS-Rolle verifizieren
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `bypassrls`, `superuser`, `security`, `prod-only-bug`, `verification`
+
+**Was passiert:** KRITISCH (prod-only): Die gesamte Patient-Journey (patients/phq9/gad7/consent-INSERT) lief lokal grün, hätte aber in PROD an RLS scheitern müssen — der Code setzte NIE den RLS-Kontext. Ursache: Die lokale Dev-Rolle war SUPERUSER + BYPASSRLS → alle RLS-Policies werden umgangen. Jeder fehlende `set_config`-Kontext, jede fehlende Policy bleibt unsichtbar, solange unter dieser Rolle getestet wird.
+**Fix:** Eine eigene NOBYPASSRLS-App-Rolle anlegen, die API mit deren `DATABASE_URL` starten und die volle E2E-Journey laufen lassen (reproduzierbar als Skript). Zusätzlich: `SET ROLE <nobypass>` + INSERT mit/ohne `set_config` → ohne ctx BLOCKED, mit ctx SUCCEEDED beweist scharfe Policies. Regel: RLS niemals nur unter der Dev-Superuser-Rolle verifizieren. Definitive Prod-Probe = API unter einer dedizierten NOBYPASSRLS-Rolle + echte E2E. Superuser/BYPASSRLS in Dev ist eine systematische Maske über ALLE RLS-Bugs.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G48 — Per-Request-RLS via einmaligem `set_config` reicht nicht — Endpoints mit Mehrfach-Commit verlieren den Kontext → `after_begin`-Listener
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `sqlalchemy`, `set-config`, `transaction`, `event-listener`, `python`
+
+**Was passiert:** Onboarding → 500 `new row violates RLS policy for "consent_records"`, obwohl ein anderer (single-commit) Onboarding-Pfad grün war. Ursache: `set_config(..., is_local=true)` ist transaktions-lokal. Endpoints, die mehrfach pro Request committen (z.B. erst patient UPDATE, dann consent INSERT), verlieren nach dem ersten Commit den GUC → der zweite Write läuft ohne RLS-Kontext.
+**Fix:** RLS-Kontext über `@event.listens_for(session, 'after_begin')` setzen statt einmalig — er wird bei JEDER neuen Transaktion re-applied, überlebt Mehrfach-Commits und bleibt transaktions-lokal (kein Cross-Request-Leak über den Connection-Pool). Regel: Transaktions-lokale Session-Variablen (RLS-Kontext, Tenant) per `after_begin`-Event re-applien, nicht einmalig pro Request — sonst kippt jeder Endpoint mit mehr als einem Commit.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G49 — RLS-Tabelle ohne INSERT-Policy = stiller Totalausfall des Schreibpfads unter Non-Superuser (besonders fatal beim Audit-Trail)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `policy`, `audit-trail`, `insert-policy`, `compliance`, `silent-failure`
+
+**Was passiert:** KRITISCH + still: Unter NOBYPASSRLS schlägt JEDER `audit_log`- und `notification_log`-INSERT fehl; der AuditLogger schluckt den Fehler → in PROD entsteht KEIN Audit-Trail (Compliance-Verletzung), ohne dass irgendwas sichtbar bricht. Ursache: Beide Tabellen hatten nur `*_select`-Policies. Bei aktivem RLS und fehlender INSERT-Policy ist INSERT für Non-Superuser DENIED. Dev-Superuser maskierte es; der defensive try/except des Loggers verschluckte den Fehler.
+**Fix:** INSERT-Policy ergänzen (`WITH CHECK (true)`, Integrität über separate no_update/no_delete-Rules). Pro Tabelle `pg_policy.polcmd` prüfen: gibt es für JEDEN genutzten Befehl (a=all/r=select/w=update/d=delete + insert) eine Policy? Regel: Bei aktiviertem RLS für jede tatsächlich genutzte Operation eine Policy verifizieren — eine fehlende INSERT-Policy ist ein stiller Schreib-Totalausfall, der unter Superuser unsichtbar ist. Audit-Writer dürfen Fehler nicht schlucken, sonst ist der Ausfall doppelt unsichtbar.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G50 — SQLAlchemy `Enum(StrEnum)` bindet die Member-NAMEN, nicht die Werte → DB-Enum-Mismatch → 500
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `sqlalchemy`, `enum`, `postgres`, `strenum`, `values-callable`, `python`
+
+**Was passiert:** `invalid input value for enum consent_status: "GRANTED"` (analog phq9_severity, gad7_severity, session status) → 500 bei jedem Insert. Ursache: SQLAlchemy `Enum(MyEnum)` bindet standardmäßig die Member-NAMEN (`GRANTED`), die DB-Enums tragen aber die lowercase Werte (`granted`).
+**Fix:** `Enum(MyEnum, values_callable=lambda obj: [e.value for e in obj])` an JEDER Enum-Spalte. Regel: Bei SQLAlchemy-Enum-Spalten gegen DB-native Enums immer `values_callable` setzen, damit die Enum-WERTE (nicht die Python-Member-Namen) gebunden werden.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G51 — ORM↔Migration Spalten-Drift: DB-Spaltennamen via `mapped_column("<db_name>", ...)` overriden, DB als Source-of-Truth
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `sqlalchemy`, `orm-drift`, `mapped-column`, `postgres`, `schema`, `raw-sql-migrations`
+
+**Was passiert:** `column phq9_assessments.q2_depressed_mood does not exist` → 500; weitere Tabellen mit Phantom-Spalten (`video_room_id`, `updated_at`) und fehlenden echten (`started_at`, `day_of_week`, `timezone`). Ursache: Das ORM-Model driftete vom Migrations-/DB-Schema ab (Model `q2_depressed_mood`, DB `q2_depressed`). Raw-SQL-Migrationen sind Source-of-Truth, das Model wurde aber unabhängig editiert.
+**Fix:** `mapped_column("<db_spaltenname>", Integer, ...)` — der DB-Name wird überschrieben, das Python-Attribut bleibt stabil. DB-Spalten via `information_schema.columns` / `\d` als Wahrheit gegenchecken und Model exakt ausrichten. Regel: Bei raw-SQL-Migrationen ist die DB das Schema-Orakel, nicht das ORM. Spaltennamen-Drift mit explizitem `mapped_column(name=...)`-Override fixen und periodisch `\d` vs Model diffen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G52 — FastAPI 204-Endpoints dürfen keine `-> None` Response-Annotation haben (sonst NoneType-response_model → AssertionError beim Import)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `fastapi`, `204`, `response-model`, `import-error`, `python`
+
+**Was passiert:** `import app.main` → `AssertionError: Status code 204 must not have a response body`. Ursache: FastAPI 0.110 leitet aus der `-> None` Return-Annotation eines 204-Endpoints einen NoneType-response_model ab und assertet dann gegen die 204-Regel (kein Body).
+**Fix:** Die `-> None` Annotation von 204-Endpoints entfernen. Regel: 204-No-Content-Endpoints in FastAPI ohne Return-Type-Annotation deklarieren — eine `-> None` erzeugt einen ungültigen response_model und bricht schon den App-Import.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G53 — KeycloakAuthMiddleware (BaseHTTPMiddleware) muss OPTIONS durchlassen — sonst stirbt der CORS-Preflight an 401 (nur im echten Cross-Origin-Browser sichtbar)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `fastapi`, `starlette`, `middleware`, `cors`, `preflight`, `options`, `auth`
+
+**Was passiert:** Browser-Submit → "Failed to fetch"/"Netzwerkfehler", Daten landen nie. Same-origin Unit-Tests sind grün. Ursache: Die Auth-Middleware überspringt OPTIONS nicht → der CORS-Preflight (der nie ein Token trägt) wird 401't, bevor die CORS-Schicht antworten kann. Unit-Tests laufen same-origin (ASGI) → kein Preflight → Bug unsichtbar.
+**Fix:** Im `dispatch`: `if request.method == 'OPTIONS': return await call_next(request)` (vor der Token-Prüfung). Regel: Jede Auth-Middleware muss OPTIONS-Preflights ungeprüft durchlassen. Cross-Origin-Verhalten ist in same-origin ASGI-Tests strukturell unsichtbar — mind. einen echten Cross-Origin-Browser-Smoke fahren.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G54 — Unauthentifizierte, identitäts-etablierende Endpoints (register/login) müssen ihren RLS-Kontext selbst setzen; `db.refresh` nach Commit scheitert
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `auth`, `register`, `login`, `set-config`, `sqlalchemy`, `expire-on-commit`
+
+**Was passiert:** `/auth/register` → 500 `new row violates RLS policy for "patients"`; danach `/auth/login` → "Patient nicht gefunden". `db.refresh(patient)` → "Could not refresh". Ursache: Register/Login etablieren die Identität, BEVOR ein Token existiert → das zentrale `get_db` kann `app.current_user_id` nicht aus `request.state` ableiten → patients-INSERT/SELECT scheitert RLS. Zusätzlich läuft `db.refresh` nach `db.commit()` in einer neuen Transaktion mit bereits resettetem GUC.
+**Fix:** In register/login `set_config('app.current_user_id', <neue/gefundene id>, true)` VOR dem patients-Zugriff. `db.refresh` entfernen — PK kommt aus `INSERT ... RETURNING` + `expire_on_commit=False`. Regel: Endpoints, die ihre eigene Identität erst erzeugen, können sich nicht auf request-getriebenes RLS verlassen und müssen den Kontext selbst setzen. Post-Commit-`refresh`/`SELECT` sieht die eigene Zeile nicht mehr (GUC weg) → auf `RETURNING` + `expire_on_commit=False` verlassen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G55 — Jeder direkte `AsyncSessionLocal()`-Nutzer außerhalb von `get_db` (Background-Worker, Audit, Signaling) braucht eigenes RLS-`set_config`
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `sqlalchemy`, `background-worker`, `audit`, `websocket`, `session-factory`
+
+**Was passiert:** Signaling-WS lehnt unter Prod-RLS jede Verbindung ab (Teilnehmer-SELECT liefert 0 Zeilen); AuditLogger-Writes scheitern still. Ursache: `get_db`-zentrales RLS deckt nur Request-Sessions ab. Helper/Worker/WS, die direkt `AsyncSessionLocal()` öffnen, haben keinen RLS-Kontext → Queries sehen 0 Zeilen / INSERTs werden abgewiesen.
+**Fix:** Vor dem Query `set_config('app.current_user_id', user_id, true)` in der eigenen Session setzen (eigene Session = eigener Kontext). Regel: Zentrales Dependency-RLS gilt nur für Request-Sessions. Jeder eigenständige Session-Opener (Worker, Logger, WS-Handler) muss den RLS-/Tenant-Kontext explizit selbst setzen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G56 — Identitäts-Ebenen-Verwechslung: JWT-sub (`therapists.user_id`) vs Row-PK (`therapists.id`) in Code UND RLS-Policies
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `postgres`, `rls`, `identity`, `jwt`, `foreign-key`, `auth`, `policy`
+
+**Was passiert:** Unter Prod-RLS sieht KEIN echter Arzt seine Sessions/Notizen/Slots/Bookings (alle Features tot); `POST /notes` → 500 RLS-Violation. Ursache: Code und DB-Policies verglichen `therapist_id` (= Row-PK `therapists.id`, FK-Ziel) direkt gegen `app.current_user_id` (= Keycloak-sub). Der sub ist aber `therapists.user_id`, nicht der PK → jeder Vergleich scheitert.
+**Fix:** Überall sub→id auflösen (`therapists.user_id = sub → id`), in Code-Writern UND in jeder RLS-Policy (`USING/WITH CHECK` löst die Indirektion auf). Nach einem Policy-Identity-Fix ALLE Writer der Tabelle gegenprüfen. Regel: Externe Identität (IdP-sub) und interne Row-PK sauber trennen — sie sind selten dasselbe. FK-Ziele und Auth-Vergleiche müssen die Indirektion explizit auflösen, sowohl im Anwendungscode als auch in RLS-Policies.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G57 — asyncpg braucht für JSONB-Casts einen JSON-STRING, kein dict — `json.dumps()` vor dem Insert
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `asyncpg`, `jsonb`, `postgres`, `json-dumps`, `python`, `serialization`
+
+**Was passiert:** `POST /usability/sus` → 500 `invalid input for $7 ... 'dict' object has no attribute 'encode'`. Ursache: Ein Python-dict wurde direkt an `CAST(:item_scores AS JSONB)` gebunden. asyncpg erwartet für einen JSONB-Cast einen JSON-String, kein dict.
+**Fix:** `json.dumps(payload)` vor dem Bind/Insert. Regel: Bei asyncpg + JSONB immer den Python-Wert via `json.dumps()` serialisieren, bevor er an einen `::jsonb`/`CAST(... AS JSONB)`-Parameter gebunden wird.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G58 — FastAPI: Endpoint-Parameter `status` shadowed das importierte `fastapi.status`-Modul → AttributeError (500 statt 403/404)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `fastapi`, `shadowing`, `status`, `naming`, `python`
+
+**Was passiert:** `status.HTTP_403_FORBIDDEN` wirft AttributeError → 500 statt des gewollten 403/404. Ursache: Ein Endpoint-Parameter hieß `status` und überschattete das modul-weite `from fastapi import status`.
+**Fix:** Parameter umbenennen (z.B. `new_status`). Regel: Endpoint-/Funktions-Parameter nie wie ein importiertes Modul benennen (`status`, `request`, `json` …) — das Shadowing schlägt erst zur Laufzeit beim Modul-Zugriff zu.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G59 — PowerShell 5.1: BOM-loses UTF-8 mit Nicht-ASCII wird als ANSI gelesen → Smart-Quote-Bytes kippen den Parser; `2>&1` bei nativen exes weglassen
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `powershell`, `windows`, `utf-8`, `bom`, `encoding`, `shell`, `native-exe`
+
+**Was passiert:** `.ps1` nach einem Edit voller Parse-Fehler ("Unerwartetes Token", Kaskade fehlender `}`), obwohl die Datei korrekt aussieht. Ursache: PowerShell 5.1 liest BOM-loses UTF-8 als ANSI (CP-1252). Die Bytes eines `—` (E2 80 94) werden zu `â€"`, wobei 0x94 in CP-1252 ein Smart-Quote ist → PS interpretiert es als String-Delimiter und Strings kippen durch die ganze Datei. Zweite Falle: `native.exe 2>&1 | Tee` macht aus stderr-NOTICEs (z.B. psql) unter `$ErrorActionPreference=Stop` terminierende `NativeCommandError`.
+**Fix:** Nach JEDEM Edit an einer `.ps1` mit Nicht-ASCII die UTF-8-BOM sicherstellen (`[Text.UTF8Encoding]::new($true)`). `2>&1` bei nativen Programmen weglassen. Regel: Auf Windows PowerShell 5.1: Skripte mit Nicht-ASCII brauchen UTF-8-BOM, sonst zerlegt ANSI-Fehlinterpretation den Parser. stderr nativer exes nicht in den PS-Stream mergen (`2>&1`), sonst werden NOTICEs zu terminierenden Fehlern.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G60 — Windows/IPv6: `localhost` löst teils auf `::1` auf, uvicorn lauscht nur auf 127.0.0.1 → intermittierende Fetch-Fehler; Fix an der GENERATOR-Quelle
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `windows`, `ipv6`, `localhost`, `uvicorn`, `env-vars`, `generated-files`, `networking`
+
+**Was passiert:** Cross-Origin-Fetches intermittierend tot, obwohl der Stack läuft; nach manuellem Fix kommt der Bug wieder. Ursache: Windows löst `localhost` teils auf IPv6 `::1` auf, während uvicorn nur auf IPv4 `127.0.0.1` lauscht. Zusätzlich: ein `start-all.ps1` REGENERIERT `.env.local` mit `localhost` bei jedem Lauf und überschreibt den manuellen Fix.
+**Fix:** `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000` (explizit IPv4). Den Fix an der QUELLE machen (Generator-here-string), nicht nur am erzeugten Artefakt. Regel: Auf Windows Dev-Hosts explizit `127.0.0.1` statt `localhost` verwenden (IPv4/IPv6-Mismatch). Wird ein Bug in einer generierten Datei gefixt, IMMER den Generator mitfixen — sonst kehrt er beim nächsten Lauf zurück.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G61 — asyncpg.connect() erwartet str — Pydantic `PostgresDsn`/`MultiHostUrl` mit `+asyncpg`-Suffix bricht (`'MultiHostUrl' object has no attribute 'decode'`)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `asyncpg`, `pydantic`, `database-url`, `postgres-dsn`, `python`, `settings`
+
+**Was passiert:** Background-Worker spammt `'MultiHostUrl' object has no attribute 'decode'` (non-fatal, aber Worker tot). Ursache: Das Pydantic-Settings-`DATABASE_URL` ist ein `PostgresDsn`/`MultiHostUrl`-Objekt (oft mit `postgresql+asyncpg://`-Driver-Suffix). `asyncpg.connect()` will einen reinen String mit `postgresql://`-Schema.
+**Fix:** `dsn = str(url).replace('postgresql+asyncpg://', 'postgresql://', 1)` und den String übergeben. Regel: Pydantic-DSN-Objekte vor der Übergabe an Low-Level-Treiber (asyncpg) zu `str()` casten und SQLAlchemy-spezifische Driver-Suffixe (`+asyncpg`) entfernen — die Treiber kennen nur das nackte Schema.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G62 — SQLAlchemy `AsyncSession` als leeres `Depends()` mit Klassen-Typ → FastAPI schematisiert es als Body → PydanticUndefinedAnnotation; sync/async-API-Mix
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `fastapi`, `sqlalchemy`, `depends`, `async-session`, `pydantic`, `python`
+
+**Was passiert:** Router importiert nicht: `PydanticUndefinedAnnotation: 'Optional' not defined`. Ursache: `db: SessionLocal = Depends()` (leeres Depends mit einem Klassen-Typ, der in Wahrheit `AsyncSession` ist) → FastAPI versucht `AsyncSession` als Request-Body-Feld zu schematisieren und stolpert über SQLAlchemy-interne `Optional`-Refs. Zusätzlich nutzte derselbe Router die sync-DB-API (`db.query/.commit` ohne await), obwohl die Session async war.
+**Fix:** Explizite Dependency-Funktion angeben (`db: Session = Depends(get_sync_db)`), passend zur tatsächlich genutzten sync/async-API. Nie ein leeres `Depends()` mit einem Klassen-Typ. Regel: FastAPI-Dependencies immer mit expliziter Provider-Funktion (`Depends(get_x)`) deklarieren, nie als bare `Depends()` mit Klassen-Annotation — sonst wird die Klasse als Request-Body fehlinterpretiert. sync- und async-Session-APIs nicht mischen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G63 — Pydantic v2: `Schema.from_attributes(obj)` existiert nicht — `from_attributes` ist eine ConfigDict-OPTION, Konstruktor ist `model_validate`
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `pydantic`, `pydantic-v2`, `from-attributes`, `model-validate`, `fastapi`, `python`
+
+**Was passiert:** Endpoints → 500 `type object has no attribute 'from_attributes'`. Ursache: `from_attributes` wurde als Konstruktor-Methode aufgerufen. In Pydantic v2 ist es eine `ConfigDict`-Option am Modell, kein Klassen-Methoden-Konstruktor.
+**Fix:** `Schema.model_validate(obj)` aufrufen und `model_config = ConfigDict(from_attributes=True)` am Schema setzen. Regel: Pydantic v2: ORM-Objekte via `model_validate()` in Schemas überführen; `from_attributes=True` gehört in `ConfigDict`, nicht in einen Methodenaufruf.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G64 — Starlette/FastAPI Version-Drift bei Status-Konstanten: `HTTP_422_UNPROCESSABLE_CONTENT` vs `_ENTITY`
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `fastapi`, `starlette`, `version-drift`, `http-status`, `python`
+
+**Was passiert:** 500 `module 'starlette.status' has no attribute 'HTTP_422_UNPROCESSABLE_CONTENT'`. Ursache: Der Code nutzte den neueren Starlette-Konstantennamen (`..._CONTENT`), die installierte Version kennt nur den älteren (`..._ENTITY`).
+**Fix:** Den breit-kompatiblen Namen `status.HTTP_422_UNPROCESSABLE_ENTITY` nutzen (in alt+neu vorhanden). Regel: Bei version-empfindlichen Framework-Konstanten den Namen wählen, der über die unterstützte Versionsspanne stabil ist — neu umbenannte Aliase brechen gegen ältere Installationen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G65 — Endpoint-Guards müssen den TATSÄCHLICH genutzten Endpoint prüfen, nicht nur den Config-Wert (Residency-Loch durch SDK-Default)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `data-residency`, `guard`, `config`, `sdk-default`, `verification`, `llm`
+
+**Was passiert:** Ein neuer LLM-Client-Pfad nutzte den US-Default-Endpoint trotz vorhandenem `assert_endpoint_matches_region`-Guard. Ursache: Der Guard prüfte nur den CONFIG-Wert, nicht den real verwendeten Endpoint. Der SDK-Konstruktor ohne expliziten `base_url`/Region fällt auf seinen globalen/US-Default zurück — am Config-Guard vorbei.
+**Fix:** Den Endpoint explizit in den Client injizieren (z.B. `http_options(base_url=...)` bzw. regionaler Vertex-Modus) und im Guard den GENUTZTEN Endpoint prüfen, nicht nur die Config. Regel: Compliance-/Residency-Guards an der tatsächlich abgesetzten Anfrage festmachen (gebaute URL/effektiver Endpoint), nicht am Config-String. SDK-Defaults unterlaufen sonst still die Garantie.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G66 — uv relinkt bei jedem `python install` ALLE Minor-Link-Dirs → laufende python.exe lockt Remove → halb zerstörte venv (`No module named '_socket'`)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `uv`, `python`, `windows`, `venv`, `file-lock`, `toolchain`
+
+**Was passiert:** `uv python install` → "failed to remove directory … os error 32"; danach venv tot (`No module named '_socket'`, leere `DLLs/`). Ursache: uv relinkt bei jedem install alle Minor-Link-Verzeichnisse. Läuft irgendeine python.exe daraus (uvicorn, MCP-Server), schlägt das Remove fehl und hinterlässt halb zerstörte Installationen — auch die gerade extrahierte.
+**Fix:** `uv python install` nur ausführen, wenn `uv python find <ver>` leer ist. Reparatur: alle Pythons stoppen → Junction via `cmd /c rmdir` (löscht nur den Link) → kaputtes versioniertes Dir per `Remove-Item` → `uv python install <volle Version>`. Verify IMMER `python -c "import socket"` (nicht nur `sys.version` — das läuft auch bei kaputter stdlib). Regel: Auf Windows vor jedem `uv pip install`/`uv python install` alle laufenden Pythons stoppen (gelockte `.pyd`/`.dll`). Toolchain-Health mit einem stdlib-Import (`import socket`) verifizieren, nicht mit `sys.version`.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G67 — Paket-Upgrade/-Install auf Windows schlägt halb fehl, wenn der Server läuft (kompilierte .pyd/.dll gelockt)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `windows`, `uv`, `pip`, `file-lock`, `pyd`, `cryptography`, `upgrade`
+
+**Was passiert:** Paket-Upgrade auf Windows scheitert oder bleibt halb-installiert. Ursache: Kompilierte Extensions (`.pyd`, z.B. cryptography) sind von einem laufenden uvicorn-Prozess gelockt.
+**Fix:** Vor `uv pip install`/Upgrade IMMER API + alle Pythons stoppen, danach Import-Smoke + Test-Suite fahren. Regel: Auf Windows native Extensions nicht ersetzen, solange ein Prozess sie geladen hat — vor jedem Dependency-Install den Server stoppen, danach mit einem Import-Smoke verifizieren.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G68 — Mock `db.execute(side_effect=[...])` ist aufruf-reihenfolge-gebunden — beim Entfernen eines DB-Calls den korrespondierenden Eintrag mitentfernen
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `testing`, `mock`, `side-effect`, `pytest`, `refactor`, `python`
+
+**Was passiert:** Test bricht, nachdem 2 Service-DB-Calls entfernt wurden, obwohl die Logik korrekt ist. Ursache: Eine `side_effect`-Liste mappt Rückgaben auf die Aufruf-REIHENFOLGE. Weniger Consumer → die Sequenz verschiebt sich → falsche Rückgabe am falschen Call.
+**Fix:** Beim Entfernen eines DB-Aufrufs immer den korrespondierenden `side_effect`-Listeneintrag mitentfernen (und beim Hinzufügen mitergänzen). Regel: Reihenfolge-gebundene Mock-`side_effect`-Listen sind an die exakte Call-Sequenz gekoppelt — bei jeder Änderung der DB-Aufruf-Anzahl die Liste synchron halten, sonst brechen unverwandte Asserts.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G69 — Pinning-Test kodiert den Bug: ein Test, der die unsichere `== raw sha256`-Gleichheit festschreibt, verhindert den Sicherheits-Fix
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `testing`, `pinning-test`, `pseudonymisation`, `sha256`, `security`, `regression`
+
+**Was passiert:** Eine Pseudonymisierungs-Migration brach 4 Tests; einer pinnte explizit die unsichere `value == raw_sha256(...)`-Gleichheit. Ursache: Der Test kodierte das fehlerhafte Verhalten (rohes, ungesalzenes SHA-256 als Pseudonym) als Soll — der Fix machte ihn rot.
+**Fix:** Den Test auf das korrekte Invariant umstellen (`!= raw_sha && == pseudonymise()`), nicht den Fix zurückrollen. Regel: Wenn ein Sicherheits-Fix einen Test rot macht, prüfen ob der Test das alte (unsichere) Verhalten festschreibt — solche 'Pinning-Tests' müssen aufs neue Invariant migriert werden, nicht der Fix verworfen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G70 — Auto-Import-Insert-Skript ohne `from app.`-Anker → NameError; nach jedem Skript-Edit Import-Smoke
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `codemod`, `auto-edit`, `import`, `name-error`, `verification`, `python`
+
+**Was passiert:** Eine Migration warf NameError, weil ein Auto-Insert keinen passenden Import-Anker fand (notifications.py). Ursache: Ein Skript, das Imports automatisch einfügt, suchte einen `from app.`-Anker, der in der Datei fehlte → der benötigte Import wurde nie gesetzt.
+**Fix:** Den Import explizit setzen und nach jedem skriptgesteuerten Datei-Edit einen Import-Smoke (`python -c "import <modul>"`) laufen lassen. Regel: Anker-basierte Auto-Edits (Import-Insert, Codemods) schlagen still fehl, wenn der Anker fehlt — nach jedem skriptgesteuerten Edit einen Import-/Parse-Smoke fahren, nicht auf den Edit allein vertrauen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G71 — Codemod ersetzt Token textuell auch außerhalb des Zielkontexts (Tailwind-4: `outline`→`outline-solid` in TS-Types und Prosa)
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `codemod`, `tailwind`, `migration`, `text-replace`, `grep-verify`, `frontend`
+
+**Was passiert:** Der Tailwind-4-Codemod ersetzte `outline`→`outline-solid` auch in einem TS-Union-Type und mitten in einem englischen Prompt-Satz ('Help me outline-solid a feasibility RCT'). Ursache: Der Codemod matcht den Token `outline` rein textuell, nicht nur in Tailwind-className-Kontexten.
+**Fix:** Nach jedem Codemod per `grep` nach dem neuen Token in Nicht-CSS-Kontexten (Types, Strings, Kommentare) suchen + tsc; Übergriffe manuell zurücksetzen. Regel: Automatische Token-Codemods greifen über Kontextgrenzen hinweg — nach jedem Lauf den eingeführten Token in Code-/String-/Kommentar-Kontexten greppen und Fehl-Ersetzungen zurücknehmen.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+---
+
+## G72 — WebRTC: ICE-Error 701 'STUN server address is incompatible' = Browser verweigert Loopback (127.0.0.1) als TURN/STUN-Adresse → LAN-IP nutzen
+
+**Erstmals beobachtet:** 2026-06-29 in wanderwell-backfill
+**Beobachtet in:** wanderwell-backfill
+**Kategorie:** GOTCHA · Tags: `webrtc`, `ice`, `stun`, `turn`, `loopback`, `coturn`, `browser-policy`
+
+**Was passiert:** `iceTransportPolicy:'relay'` verband nicht — ICE-Error 701 bei `turn:127.0.0.1:3478`. Zuerst fälschlich als Docker-Windows-Limit vermutet. Ursache: Chromium verweigert Loopback (127.0.0.1) als STUN/TURN-Server-Adresse (Browser-Policy), nicht ein Infra-Limit.
+**Fix:** TURN-URI + Coturn-`--external-ip` auf die LAN-IP des Hosts (z.B. 192.168.x.x) setzen, nicht 127.0.0.1. Den echten ICE-Error via `onicecandidateerror` auslesen statt zu raten. Regel: 'Infra-Limit' bei WebRTC nicht zu früh annehmen — den echten `onicecandidateerror` lesen. Browser verweigern Loopback als ICE-Server-Adresse; TURN/STUN immer über eine echte (LAN-)IP adressieren.
+**Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)

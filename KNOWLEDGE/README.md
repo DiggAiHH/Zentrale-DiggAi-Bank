@@ -10,5 +10,7 @@ Inhalte werden täglich vom Daily-Sync (20:00 Berlin) aus allen Source-Repos agg
 | `METHODOLOGY.md` | Workflow-Patterns (PRD, Loop, Run-Log, DoD) |
 | `AGENT_LEARNINGS/` | Pro Agent: Stärken / Bias / Bewährte Prompts |
 | `TOOLS/` | Tool-Recipes (Ralph, Caveman, MCP-Connectors) |
+| `INDEX.md` | Master-Index ALLER Eintraege (ID, Titel, Tags, Beobachtet in) -- Dedup + Navigation |
+| `NEVER_REPEAT.md` | Pareto-Quintessenz: die wichtigsten wiederkehrenden Fehler/Regeln |
 
 **Eintrags-Format:** Jede neue Erkenntnis bekommt eine ID (G01, G02, ... pro Kategorie), "Erstmals beobachtet"-Datum, "Beobachtet in"-Liste, "Was passiert", "Fix", "Quellen".

@@ -181,3 +181,15 @@ _(Auto-extended by daily-sync.)_
 **Was scheitert:** Eine Parallel-Session hat ohne Preflight (memory/runs lesen + once-guard) losgecodet und Dateien einer anderen Session via Write ÜBERSCHRIEBEN. Da diese nie committet (untracked) waren, waren die Vorversionen unwiederbringlich verloren; zusätzlich entstanden Duplikate (zwei Padding-Libs, zwei SRI-Mechanismen), die nachträglich reconciled werden mussten.
 **Fix:** Vor jedem Schreiben im geteilten Tree zwingend Preflight: letzte Run-Logs lesen + once-guard-precheck. Bei heißem Tree nur NEUE Dateien unter eindeutigen Pfaden anlegen, bestehende minimal-invasiv erweitern, heiße Dateien gar nicht anfassen. Untracked = nicht wiederherstellbar → niemals blind überschreiben. Siehe W14, M05.
 **Quellen:** `memory/runs/2026-06-15_cowork_opus-4-8-05.md`, `2026-06-15_cowork_opus-4-8-07.md` (diggai-anamnese)
+
+---
+
+## F15 — Zwei Komponenten committen denselben Wert getrennt -> Race; in EINEN atomaren Commit zusammenfassen
+
+**Erstmals beobachtet:** 2026-06-29 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** FAILED · Tags: `race-condition`, `ui-state`, `atomicity`, `consent`, `signature-pad`, `imperative-ref`
+
+**Was passiert:** Unterschrift (SignaturePad-Canvas) und Einwilligung wurden ueber getrennte Buttons/Schritte erfasst -> Race zwischen 'Canvas committen' und 'Consent setzen', Daten teils nicht persistiert.
+**Fix:** Zusammengehoerende Schreibvorgaenge in EINER Aktion buendeln: ein Button committet erst den Canvas (ref.commit) und setzt dann den Consent -> kein Race. Generisch: voneinander abhaengige State-Writes nicht auf mehrere User-Aktionen/Effekte verteilen.
+**Quellen:** `commit f4458f9 (consent B3 SignaturePad ref.commit)` (diggai-anamnese)
