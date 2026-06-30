@@ -934,3 +934,52 @@ Generell: wenn ein Server ein exaktes Format erzwingt (feste Länge/Hex/Regex), 
 **Was passiert:** `iceTransportPolicy:'relay'` verband nicht — ICE-Error 701 bei `turn:127.0.0.1:3478`. Zuerst fälschlich als Docker-Windows-Limit vermutet. Ursache: Chromium verweigert Loopback (127.0.0.1) als STUN/TURN-Server-Adresse (Browser-Policy), nicht ein Infra-Limit.
 **Fix:** TURN-URI + Coturn-`--external-ip` auf die LAN-IP des Hosts (z.B. 192.168.x.x) setzen, nicht 127.0.0.1. Den echten ICE-Error via `onicecandidateerror` auslesen statt zu raten. Regel: 'Infra-Limit' bei WebRTC nicht zu früh annehmen — den echten `onicecandidateerror` lesen. Browser verweigern Loopback als ICE-Server-Adresse; TURN/STUN immer über eine echte (LAN-)IP adressieren.
 **Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+
+---
+
+## G73 — Debounce-Such-UI: Leerzustand ("keine Treffer") blitzt im Debounce-Loch auf, weil das can-search-Prädikat vor der ersten aufgelösten Suche true wird
+
+**Erstmals beobachtet:** 2026-06-30 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `frontend`, `react`, `debounce`, `empty-state`, `search`, `race`, `ux`
+
+**Was passiert:** Eine Suche mit Mindestlänge (z.B. ≥3 Zeichen) setzt `canSearch` sofort true, die eigentliche Query ist aber debounced (z.B. 350ms). In diesem Loch ist `showNoResults` kurz true → die "keine Treffer"-/Leerzustand-Karte erscheint ~1s, BEVOR überhaupt gesucht wurde.
+**Fix:** Einen `hasResolved`/`hasSearchedOnce`-State führen: beim Tippen false (im Debounce-Effekt zurücksetzen), nach Abschluss der Suche (im `finally` von runSearch) true. Leerzustand nur zeigen wenn `showNoResults && hasResolved`. Regel: Leerzustände an "mindestens einmal aufgelöst", nicht an die Eingabe-Länge koppeln. Regressionstest: "Karte erscheint erst nach abgeschlossener leerer Suche".
+**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-03.md` (diggai-anamnese)
+
+---
+
+## G74 — React-Router-Hooks (`useNavigate`/`useParams`) lassen Komponenten-Tests ohne Router-Wrapper crashen
+
+**Erstmals beobachtet:** 2026-06-30 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `frontend`, `react-router`, `testing`, `vitest`, `memory-router`, `hooks`
+
+**Was passiert:** Sobald einer bestehenden Komponente `useNavigate`/`useParams` hinzugefügt wird, crasht jeder Unit-Test, der sie ohne Router-Provider rendert ("useNavigate() may be used only in the context of a Router"). Der Test war vorher grün und bricht ohne erkennbaren Logik-Bezug.
+**Fix:** Test-Render in `<MemoryRouter>` wrappen (Render-Helper, ggf. mit `initialEntries` für `useParams`). Regel: Beim Einbau von Router-Hooks in eine Komponente sofort die zugehörigen Tests in einen Router-Wrapper heben — die roten Tests sind Harness-Drift, kein Produkt-Bug.
+**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-04.md` (diggai-anamnese)
+
+---
+
+## G75 — Commit-Message mit `(`/`)` oder `1)`/`2)` bricht die Shell → `git commit -F -` Heredoc statt `-m`
+
+**Erstmals beobachtet:** 2026-06-30 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `git`, `shell`, `commit`, `quoting`, `heredoc`
+
+**Was passiert:** Eine `git commit -m "..."`-Message mit Klammern, Aufzählungs-`1)`/`2)` oder anderen Shell-Metazeichen wird vom Shell-Parser zerrissen (Subshell/Glob/Argument-Split) → der Commit schlägt fehl oder bekommt eine zerhackte Message.
+**Fix:** Message über `git commit -F -` per Heredoc (oder `git commit -F <datei>`) übergeben — der Text durchläuft kein Shell-Parsing. Regel: Mehrzeilige oder sonderzeichen-haltige Commit-Messages nie inline via `-m`, immer via `-F`.
+**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-05.md` (diggai-anamnese)
+
+---
+
+## G76 — `window.confirm()` ist in mobilen Webviews unzuverlässig ("Knopf reagiert nicht") → Inline-Bestätigung statt nativem Dialog
+
+**Erstmals beobachtet:** 2026-06-30 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `frontend`, `webview`, `mobile`, `window-confirm`, `ux`, `dialog`
+
+**Was passiert:** Ein Bestätigungs-Flow über `window.confirm()` wirkt auf Mobile / in eingebetteten Webviews tot — der Button reagiert scheinbar nicht, weil der native Dialog vom Webview unterdrückt/verschluckt wird.
+**Fix:** Bestätigung als Inline-UI bauen (eigener Bestätigungs-State + Ja/Nein-Buttons) statt `window.confirm()`/`window.alert()`. Regel: Keine nativen Browser-Dialoge in Flows, die auch im Webview/auf Mobile laufen.
+**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-06.md` (diggai-anamnese)

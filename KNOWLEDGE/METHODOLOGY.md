@@ -308,3 +308,16 @@ Ein Subagent meldete einen vorhandenen Praxis-Private-Key fälschlich als ABSENT
 **Was passiert:** E2E meldete '2 failed' als scheinbare Regression — tatsächlich connectete Playwright (kein `webServer` in der Config) zu einem stalen/kaputten Dev-Server auf :3000 ('Internal Server Error'), Rest aus vielen `npm run dev`/`next start` derselben Session. Ursache: Viele Server über eine Session auf demselben Port hinterlassen Windows-Prozess-Müll; ohne `webServer`-Config trifft der Test einen toten Altserver.
 **Fix:** Vor E2E ALLE node-Prozesse killen (`taskkill /F /IM node.exe`), EINEN sauberen Dev-Server starten, `/de`=200 verifizieren, DANN testen. Backend (python:8000) bleibt unberührt. Regel: Rote E2E zuerst als Umgebungs-Artefakt verdächtigen (staler Server, falscher Port), nicht als Code-Regression. Vor jedem Lauf einen sauberen, warm-kompilierten Server erzwingen und mit einem 200-Probe bestätigen.
 **Quellen:** `memory/runs/` Backfill 2026-06-23..29 (wanderwell-backfill)
+
+
+---
+
+## M23 — Outward-facing Changes (neue öffentliche Endpoints + nutzerseitige UI): lokal bauen, testen, verifizieren — aber Deploy/Push auf Human-Sign-off gaten
+
+**Erstmals beobachtet:** 2026-06-30 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** METHODOLOGY · Tags: `methodology`, `deploy-gate`, `outward-facing`, `human-in-the-loop`, `release`, `safety`
+
+**Was passiert:** Eine Änderung berührt neue Backend-Routen UND nutzerseitige UI (outward-facing). Lokal ist alles grün (type-check, eslint, Tests, Build, Compliance-Gate), aber autonom zu pushen/deployen wäre riskant wegen Außenwirkung, Datenflüssen und Owner-Erwartung.
+**Konkret:** Implementieren, vollständig lokal verifizieren, im Run-Log explizit als "NICHT deployed — Push/Deploy mit Owner abstimmen" markieren, und den eigentlichen Deploy als separaten, human-gegateten Schritt führen. Regel: reversibel & intern → autonom abschließen; outward-facing / schwer reversibel → bauen + verifizieren, aber Freigabe einholen statt selbst live zu schalten.
+**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-06.md` (diggai-anamnese)

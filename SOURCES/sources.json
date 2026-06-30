@@ -58,7 +58,7 @@
     }
   ],
   "sync_window_hours": 24,
-  "last_sync_iso": "2026-06-29",
-  "next_sync_iso": "2026-06-30T20:00:00+02:00",
+  "last_sync_iso": "2026-06-30",
+  "next_sync_iso": "2026-07-01T20:00:00+02:00",
   "notify_email": "DiggAi@tutanota.de"
 }
