@@ -320,4 +320,17 @@ Ein Subagent meldete einen vorhandenen Praxis-Private-Key fälschlich als ABSENT
 
 **Was passiert:** Eine Änderung berührt neue Backend-Routen UND nutzerseitige UI (outward-facing). Lokal ist alles grün (type-check, eslint, Tests, Build, Compliance-Gate), aber autonom zu pushen/deployen wäre riskant wegen Außenwirkung, Datenflüssen und Owner-Erwartung.
 **Konkret:** Implementieren, vollständig lokal verifizieren, im Run-Log explizit als "NICHT deployed — Push/Deploy mit Owner abstimmen" markieren, und den eigentlichen Deploy als separaten, human-gegateten Schritt führen. Regel: reversibel & intern → autonom abschließen; outward-facing / schwer reversibel → bauen + verifizieren, aber Freigabe einholen statt selbst live zu schalten.
-**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-06.md` (diggai-anamnese)
+**Ergänzung (2026-07-01):** Ein automatischer Deploy-Klassifikator kann ASYMMETRISCH greifen — er ließ ein Backend-Deploy durch, blockte aber das nachfolgende Frontend-Deploy als „unauthorized production deploy" (Human-Review). Ergebnis: gespaltener Zustand (Backend live, Frontend hinterher). Konsequenz: BE+FE als EINE freigabepflichtige Einheit behandeln; nach einem BE-Deploy prüfen, ob das FE nachgezogen ist, sonst laufen neue Endpoints ohne passende UI (oder umgekehrt).
+**Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-06.md`, `2026-07-01_claude-code_sonnet-5-04.md` (diggai-anamnese)
+
+---
+
+## M24 — Nebenläufige Commits zuerst attribuieren (git log/author), bevor man sie als fremden „Rivalen"-Writer behandelt — die eigenen Sub-Agenten sehen aus wie ein Fremder
+
+**Erstmals beobachtet:** 2026-07-01 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** METHODOLOGY · Tags: `multi-agent`, `orchestration`, `git`, `attribution`, `false-conflict`
+
+**Was passiert:** In einer orchestrierten Session mit delegierten Background-/Geschwister-Agenten tauchten deren Commits im geteilten Working-Tree auf und wurden wiederholt als „paralleler Copilot"/fremder Prozess fehlinterpretiert. Das kostete defensiven Reconciliation-Aufwand und hätte zu falschen Rollbacks führen können — dabei war es die eigene Orchestrierung.
+**Konkret:** Bei einem unerwarteten nebenläufigen Commit ZUERST attribuieren: `git log --oneline`, Author/Committer + Commit-Message prüfen, gegen die eigene Agenten-Liste abgleichen. Erst wenn er nachweislich fremd ist, defensiv reconcilen. Die by-name/HEAD-Recheck-Hygiene (W14) gilt weiterhin — aber „nebenläufig" heißt nicht automatisch „fremd".
+**Quellen:** `memory/runs/2026-07-01_claude-code_sonnet-5-04.md` (diggai-anamnese)

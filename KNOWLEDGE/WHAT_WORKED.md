@@ -158,7 +158,8 @@ _(Auto-extended by daily-sync. Last sync: pending first run.)_
 **Kategorie:** WORKED · Tags: `git`, `multi-agent`, `concurrency`, `hygiene`
 
 **Was funktioniert:** Bei mehreren parallel schreibenden Agents: NIE `git add -A`; nur kohärente Dateien by-name (`git commit -- <file>`); HEAD direkt vor dem Commit re-checken (Fremd-Commits wandern den Branch weiter); Fremd-Residue dem Operator zur Einzel-Entscheidung flaggen statt blind mitcommitten.
-**Quellen:** `diggai-anamnese/memory/runs/2026-06-04_claude-code_opus-4-7-02.md` (diggai-anamnese)
+**Ergänzung (2026-07-01, mehrfach re-bestätigt):** Wenn EINE Datei eigene UND fremde Hunks vermischt (z.B. gemeinsame Locale-Datei), reicht by-name-Staging nicht — dann nur den eigenen Hunk stagen: `git diff <file>` → eigenen Hunk extrahieren → `git apply --cached` je Datei; Rest bleibt unstaged für den anderen Prozess. Bringt ein Geschwister-Commit die eigenen Zeilen bereits mit ein, am Ende nur die EXKLUSIV eigenen Dateien explizit per Pfad stagen.
+**Quellen:** `diggai-anamnese/memory/runs/2026-06-04_claude-code_opus-4-7-02.md`, `2026-07-01_claude-code_sonnet-5-01.md`, `2026-07-01_claude-code_sonnet-5-03.md` (diggai-anamnese)
 
 ---
 

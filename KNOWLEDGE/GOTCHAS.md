@@ -983,3 +983,15 @@ Generell: wenn ein Server ein exaktes Format erzwingt (feste Länge/Hex/Regex), 
 **Was passiert:** Ein Bestätigungs-Flow über `window.confirm()` wirkt auf Mobile / in eingebetteten Webviews tot — der Button reagiert scheinbar nicht, weil der native Dialog vom Webview unterdrückt/verschluckt wird.
 **Fix:** Bestätigung als Inline-UI bauen (eigener Bestätigungs-State + Ja/Nein-Buttons) statt `window.confirm()`/`window.alert()`. Regel: Keine nativen Browser-Dialoge in Flows, die auch im Webview/auf Mobile laufen.
 **Quellen:** `memory/runs/2026-06-30_claude-code_opus-4-8-06.md` (diggai-anamnese)
+
+---
+
+## G77 — i18n-Keys mit nur Inline-`defaultValue` nie in `translation.json` registriert → Quellsprache in ALLEN Locales; Paritäts-Gate ist blind
+
+**Erstmals beobachtet:** 2026-07-01 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** GOTCHA · Tags: `i18n`, `locales`, `parity-gate`, `defaultvalue`, `blind-spot`, `coverage`
+
+**Was passiert:** Komponenten rufen `t('foo.bar', { defaultValue: '...' })` auf, ohne den Key je in `translation.json` (Quell-Locale) zu registrieren. Das i18n-Paritäts-Gate prüft nur, ob JEDE Locale die Keys der Quell-Locale hat — es macht KEINEN Source-Scan über `t()`-Aufrufe im Code. Nicht-registrierte Keys existieren also in KEINER Locale, fallen dem Gate nie auf, und rendern über den Inline-Default in JEDER Sprache in der Quellsprache (hier: Deutsch). Ganze Komponenten sind so unbemerkt einsprachig.
+**Fix:** Das i18n-Gate um einen Source-Scan erweitern (alle `t('…')`-Keys aus dem Code extrahieren und gegen die Quell-Locale abgleichen — fehlende Registrierung = Fehler), nicht nur Locale↔Locale-Parität. Kurzfristig: `defaultValue` als Code-Smell behandeln — jeder neue Key gehört in `translation.json`, Inline-Default nur als Notnagel. Regel: „Paritäts-Gate ≠ Coverage-Gate".
+**Quellen:** `memory/runs/2026-07-01_claude-code_sonnet-5-04.md` (diggai-anamnese)

@@ -193,3 +193,15 @@ _(Auto-extended by daily-sync.)_
 **Was passiert:** Unterschrift (SignaturePad-Canvas) und Einwilligung wurden ueber getrennte Buttons/Schritte erfasst -> Race zwischen 'Canvas committen' und 'Consent setzen', Daten teils nicht persistiert.
 **Fix:** Zusammengehoerende Schreibvorgaenge in EINER Aktion buendeln: ein Button committet erst den Canvas (ref.commit) und setzt dann den Consent -> kein Race. Generisch: voneinander abhaengige State-Writes nicht auf mehrere User-Aktionen/Effekte verteilen.
 **Quellen:** `commit f4458f9 (consent B3 SignaturePad ref.commit)` (diggai-anamnese)
+
+---
+
+## F16 — Pro-Vorgang-Status aus einem Ressourcen-Existenz-Prädikat abgeleitet → „Ressource existiert" ≠ „dieser Vorgang erledigt"
+
+**Erstmals beobachtet:** 2026-07-01 in diggai-anamnese
+**Beobachtet in:** diggai-anamnese
+**Kategorie:** FAILED · Tags: `state-modeling`, `logic-bug`, `derived-status`, `inbox`, `idempotency`
+
+**Was passiert:** Der „erledigt/beliefert"-Status EINZELNER Vorgänge (Inbox-Nachrichten) wurde aus einem Existenz-Prädikat einer geteilten Ressource abgeleitet (`hasKey(entity)` → „Vorgang beliefert"). Sobald dieselbe Entität mehrere offene Vorgänge hat, kippen ALLE fälschlich auf „erledigt", sobald der erste die Ressource anlegt — obwohl nur einer bearbeitet wurde.
+**Fix:** Vorgangs-Erledigung explizit tracken (z.B. `deliveredIds`-Set, nur nach erfolgreicher Aktion befüllt), nie aus der bloßen Existenz einer nebenläufig geteilten Ressource ableiten. Regel: Pro-Item-Zustand braucht einen Pro-Item-Marker; Existenz eines gemeinsamen Objekts beweist nicht, dass ein bestimmter Vorgang abgeschlossen ist.
+**Quellen:** `memory/runs/2026-07-01_claude-code_sonnet-5-02.md` (diggai-anamnese)
